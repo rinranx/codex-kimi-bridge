@@ -38,7 +38,7 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 
 - macOS、Linux 或 Windows
 - Node.js 20 或更高版本；当前开发和测试环境为 Node.js 26
-- Kimi Code API Key。Allegretto 的 Kimi Code Key 可直接使用
+- Kimi Code API Key。不同会员等级均可使用，请按下方表格选择有权限的模型
 
 不需要 `npm install`，项目的运行依赖数量为 0。
 
@@ -82,17 +82,138 @@ timeout_ms = 5000
 refresh_interval_ms = 0
 ```
 
-子代理配置：
+子代理配置（下面是 Allegretto 会员调用 K3 1M 上下文的实测示例）：
 
 ```toml
 model_provider = "codex_kimi_bridge"
 model = "k3"
 model_context_window = 1048576
+model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 ```
 
 这里的 `xhigh` 会转换为 Kimi K3 的 `max`。
+
+## 按会员等级选择 Kimi Code 模型
+
+上面的 `k3` 1M 配置不是安装桥接的硬性要求，只是本项目已经实际验证过的 Allegretto 配置。所有 Kimi Code 会员使用相同的上游地址和 Kimi Code API Key 类型：
+
+```text
+https://api.kimi.com/coding/v1/chat/completions
+```
+
+区别只在于会员等级允许调用的模型和上下文窗口：
+
+| Kimi 会员等级 | 推荐模型 ID | 上下文窗口 | 适用场景 |
+| --- | --- | ---: | --- |
+| Andante／所有 Kimi Code 会员 | `kimi-for-coding` | `262144` | 日常开发、代码补全 |
+| Moderato | `k3-256k` | `262144` | 推荐；256K 内与 K3 效果相同，更节省配额 |
+| Moderato | `k3` | `262144` | 使用 K3，但没有 1M 权限 |
+| Allegretto 及以上 | `k3` | `1048576` | 大型代码库、长上下文任务 |
+| Allegretto 及以上 | `kimi-for-coding-highspeed` | `262144` | 优先输出速度 |
+
+模型权限和上下文以 [Kimi Code 官方模型配置](https://www.kimi.com/code/docs/en/kimi-code/models.html) 为准。官方说明中，`k3-256k` 在 256K 范围内与 `k3` 效果相同，而 `k3` 1M 的配额消耗约为其两倍。
+
+选择模型后，修改 `~/.codex/agents/kimi_frontend.toml` 中对应的几行。
+
+### Andante／通用会员
+
+```toml
+model = "kimi-for-coding"
+model_context_window = 262144
+model_auto_compact_token_limit = 230000
+model_reasoning_effort = "high"
+```
+
+```sh
+codex-kimi-bridge serve --model kimi-for-coding
+```
+
+### Moderato 推荐配置
+
+```toml
+model = "k3-256k"
+model_context_window = 262144
+model_auto_compact_token_limit = 230000
+model_reasoning_effort = "high"
+```
+
+```sh
+codex-kimi-bridge serve --model k3-256k
+```
+
+### Allegretto 及以上：K3 1M
+
+```toml
+model = "k3"
+model_context_window = 1048576
+model_auto_compact_token_limit = 900000
+model_reasoning_effort = "xhigh"
+```
+
+```sh
+codex-kimi-bridge serve --model k3
+```
+
+### Allegretto 及以上：K2.7 HighSpeed
+
+```toml
+model = "kimi-for-coding-highspeed"
+model_context_window = 262144
+model_auto_compact_token_limit = 230000
+model_reasoning_effort = "high"
+```
+
+```sh
+codex-kimi-bridge serve --model kimi-for-coding-highspeed
+```
+
+`serve --model` 设置桥接器的默认模型，并显示在健康检查中；Codex 子代理实际发送的模型以 `kimi_frontend.toml` 中的 `model` 为准。因此切换模型时应同步修改两处。然后重新启动桥接，并重启 Codex Desktop 或新建任务，避免沿用旧会话的模型缓存。运行实时诊断时，也应把同一个模型传给 `doctor --live --model <模型 ID>`。
+
+同一个 Kimi Code Key 可以在当前会员等级允许的模型之间切换，不需要因为更换模型而重新生成 Key。
+
+## 非 Kimi Code 会员：按量付费 API（进阶）
+
+Kimi Code 会员 Key 与 Kimi API 开放平台 Key 是两个独立产品，Key、模型 ID 和调用地址不能混用。详见 [Kimi API 官方排错说明](https://www.kimi.com/help/kimi-api/api-troubleshooting)。
+
+国际开放平台 Key 使用：
+
+```sh
+codex-kimi-bridge serve \
+  --upstream https://api.moonshot.ai/v1/chat/completions \
+  --model kimi-k3
+```
+
+中国大陆开放平台 Key 使用：
+
+```sh
+codex-kimi-bridge serve \
+  --upstream https://api.moonshot.cn/v1/chat/completions \
+  --model kimi-k3
+```
+
+对应的 `kimi_frontend.toml` 配置为：
+
+```toml
+model = "kimi-k3"
+model_context_window = 1048576
+model_auto_compact_token_limit = 900000
+model_reasoning_effort = "xhigh"
+```
+
+再把开放平台 Key 写入同一个本机钥匙串项目。`codex-kimi-code-api-key` 只是本地项目名称，不决定 Key 的类型：
+
+```sh
+/usr/bin/security add-generic-password \
+  -U \
+  -a "$USER" \
+  -s "codex-kimi-code-api-key" \
+  -w
+```
+
+> [!IMPORTANT]
+> `codex-kimi-bridge 0.1.0` 的完整实测和发布验收使用的是 Kimi Code 会员路线。开放平台提供兼容的 Chat Completions 接口，桥接器也允许自定义上游和模型，但这条路线在 0.1.0 中应视为进阶／实验性配置；正式使用前请先用相同的 Key、地区地址和模型完成小额测试。
 
 ## 更换 API Key
 
