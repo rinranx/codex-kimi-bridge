@@ -1,5 +1,8 @@
 # Merge this snippet into ~/.codex/config.toml.
-# Do not duplicate [agents] or provider tables that already exist.
+# Do not duplicate [features], [agents], or provider tables that already exist.
+
+[features]
+multi_agent_v2 = true
 
 [agents]
 enabled = true

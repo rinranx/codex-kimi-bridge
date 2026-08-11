@@ -99,6 +99,21 @@ codex-kimi-bridge --version
 
 个人 provider 必须写入用户级配置 `~/.codex/config.toml`，不要写进项目的 `.codex/config.toml`。
 
+先确认 Codex 的 Multi-agent v2 已启用：
+
+1. 打开 Codex Desktop 设置。
+2. 在“实验功能”或“功能”页面找到 **Multi-agent v2**。
+3. 如果它存在但尚未开启，请将其开启。
+4. 较新的 Codex 版本可能已默认启用并将其标记为稳定功能；如果设置中没有开关，但 Codex 已能显示和调度子代理，则无需额外操作。
+
+也可以在终端检查：
+
+```sh
+codex features list | grep -E '^multi_agent(_v2)?[[:space:]]'
+```
+
+输出中的 `multi_agent` 和 `multi_agent_v2` 应为 `true`。下面的模板仍会显式写入 `multi_agent_v2 = true`，以兼容需要手动开启的 Codex 版本。
+
 先确保文件存在，再打开：
 
 ```sh
@@ -111,14 +126,17 @@ open -e "$HOME/.codex/config.toml"
 
 注意：
 
+- 如果已经有 `[features]`，只添加或更新 `multi_agent_v2 = true`，不要创建第二个 `[features]`。
 - 如果已经有 `[agents]`，只把对应键加进现有表，不要创建第二个 `[agents]`。
 - 如果已经有 `[model_providers.codex_kimi_bridge]`，更新现有表，不要重复粘贴。
 - 不要把 API Key 直接写进 TOML。
-- 不要求添加 `multi_agent_v2`。截至本指南日期，当前 Codex 版本默认启用子代理工作流；未来优先遵循当时的 Codex 设置界面和官方文档。
 
 需要合并的内容是：
 
 ```toml
+[features]
+multi_agent_v2 = true
+
 [agents]
 enabled = true
 max_concurrent_threads_per_session = 4
@@ -224,7 +242,7 @@ codex-kimi-bridge request "只回复 OK"
 
 5. 在 Desktop 的子代理活动区确认出现 `kimi_frontend` 工作线程。
 
-如果当前 Codex 版本仍限制实验性第三方 provider 子代理，桥接健康检查仍可能成功，但 Desktop 会拒绝调度。这属于 Codex 客户端限制，不代表 API Key 或桥接损坏。
+如果 Multi-agent v2 未启用，或当前 Codex 版本仍限制第三方 provider 子代理，桥接健康检查仍可能成功，但 Desktop 会拒绝调度。先确认功能状态，再判断是否属于 Codex 客户端限制；这不一定代表 API Key 或桥接损坏。
 
 ## 可选：安装 Codex 管理 Skill
 
@@ -330,6 +348,7 @@ rg -n '^(name|description|developer_instructions|model_provider|model)\s*=' \
 - [ ] Key 只保存在 macOS Keychain
 - [ ] provider URL 是 `http://127.0.0.1:8787/v1`
 - [ ] 桥接上游是 `https://api.kimi.com`
+- [ ] Multi-agent v2 已启用，或 `codex features list` 显示其状态为 `true`
 - [ ] 没有使用 `--allow-non-loopback`
 - [ ] `kimi_frontend` 保持 `sandbox_mode = "read-only"`
 - [ ] 真实测试结束后没有把完整响应或 Key 发到公开位置
