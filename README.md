@@ -42,6 +42,32 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 
 不需要 `npm install`，项目的运行依赖数量为 0。
 
+## 确认启用 Codex Multi-agent v2
+
+这个项目通过 Codex 的多代理功能把 `kimi_frontend` 作为自定义子代理调度。继续配置前，请先确认 Multi-agent v2 已启用：
+
+1. 打开 Codex Desktop 设置。
+2. 在“实验功能”或“功能”页面找到 **Multi-agent v2**。
+3. 如果它存在但尚未开启，请将其开启。
+4. 完全退出并重新打开 Codex Desktop。
+
+较新的 Codex 版本可能已经默认启用 Multi-agent v2，并将其标记为稳定功能；如果设置中没有开关，但 Codex 已能显示和调度子代理，则不需要额外修改。
+
+也可以在终端检查当前状态：
+
+```sh
+codex features list | grep -E '^multi_agent(_v2)?[[:space:]]'
+```
+
+输出中的 `multi_agent` 和 `multi_agent_v2` 应为 `true`。旧版 Codex 或手动管理配置时，可以在 `~/.codex/config.toml` 中加入：
+
+```toml
+[features]
+multi_agent_v2 = true
+```
+
+如果文件中已经有 `[features]`，只添加 `multi_agent_v2 = true`，不要创建第二个 `[features]`。后文的 `[agents] enabled = true` 也必须保留；两项用途不同。
+
 ## 可选：安装成全局命令
 
 在项目目录运行：
@@ -268,7 +294,7 @@ npm run smoke
 - 不支持 `previous_response_id`；调用方需要像 Codex 一样发送完整对话 items
 - `parallel_tool_calls` 不转发，因为 Kimi Chat API 文档未声明该请求字段
 - 多轮工具调用的推理缓存是进程内状态；若桥接在一次未完成的工具链中途重启，请重开该 Kimi 子代理任务
-- Codex Desktop 的实验性 Multi-agent v2 是否允许第三方 provider 仍由 Codex 本身决定；桥接器只负责协议兼容，不能绕过 Desktop 的调度限制
+- Codex Desktop 是否允许把第三方 provider 调度为 Multi-agent v2 子代理仍由 Codex 本身决定；桥接器只负责协议兼容，不能绕过 Desktop 的调度限制
 
 ## 可选伴随技能
 
