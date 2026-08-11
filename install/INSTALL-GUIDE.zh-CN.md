@@ -1,5 +1,7 @@
 # Codex Kimi Bridge 全新安装指南（macOS）
 
+**简体中文** | [English](INSTALL-GUIDE.en.md)
+
 适用版本：`codex-kimi-bridge 0.1.0`
 配置核对日期：2026-08-11
 
@@ -17,12 +19,14 @@ Codex Desktop 主代理
 
 ## 安装包内容
 
-完整安装包包含下面四项；不要把 API Key 写进任何文件：
+完整安装包包含以下核心内容；不要把 API Key 写进任何文件：
 
 - `codex-kimi-bridge-0.1.0.tgz`
 - `SHA256SUMS`
-- 本指南
+- 中英文安装指南和 README
 - `templates/` 目录
+- `manage-codex-kimi-bridge` 管理 Skill
+- 双击启动脚本以及许可证、安全和来源说明
 
 推荐下载完整的 `codex-kimi-bridge-macos-install-kit-0.1.0.zip`，校验 SHA-256 后再解压安装。
 
@@ -188,6 +192,8 @@ sed -n '1,220p' "$HOME/.codex/agents/kimi_frontend.toml"
 - `model_reasoning_effort = "xhigh"`，桥接器会映射为 Kimi 的 `max`
 - `sandbox_mode = "read-only"`
 
+随附模板使用的是已经实测的 Allegretto + K3 1M 配置。如果你的会员等级不同，请从 [中文 README 的会员模型表](../README.md#按会员等级选择-kimi-code-模型) 选择有权限的模型和上下文窗口，修改 `kimi_frontend.toml`，并在启动或诊断桥接时使用相同的模型 ID。
+
 ## 第 6 步：启动桥接
 
 在一个独立终端运行：
@@ -206,6 +212,14 @@ privacy: request bodies and credentials are not logged
 
 保留这个终端窗口。每次重启 Mac 后都要重新启动桥接。也可以双击安装包中的 `start-installed-codex-kimi-bridge.command`。
 
+如果选择的不是默认 `k3`，请用相同的模型 ID 启动桥接，例如：
+
+```sh
+codex-kimi-bridge serve --model k3-256k
+```
+
+Codex 实际发送的模型仍由 `kimi_frontend.toml` 决定；两处保持一致，可以让健康检查和诊断信息准确显示当前模型。
+
 ## 第 7 步：验证本机、Key 和真实 Kimi 请求
 
 另开一个终端。
@@ -221,6 +235,12 @@ codex-kimi-bridge doctor --json
 
 ```sh
 codex-kimi-bridge doctor --live --json
+```
+
+如果选择的不是 `k3`，实时诊断也要传入相同模型，例如：
+
+```sh
+codex-kimi-bridge doctor --live --json --model k3-256k
 ```
 
 也可以经过本机 Responses 桥接测试：
@@ -340,7 +360,7 @@ rg -n '^(name|description|developer_instructions|model_provider|model)\s*=' \
 
 ### Kimi 返回模型权限或额度错误
 
-确认使用 Kimi Code API Key，而不是其他平台的 Key；确认会员仍允许调用 `k3`，并检查 Kimi Code 控制台中的额度和 Key 状态。
+确认使用 Kimi Code API Key，而不是其他平台的 Key；确认会员允许调用 `kimi_frontend.toml` 中配置的模型，并检查 Kimi Code 控制台中的额度和 Key 状态。
 
 ## 安全检查清单
 

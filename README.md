@@ -1,5 +1,7 @@
 # Codex Kimi Bridge
 
+**简体中文** | [English](README.en.md)
+
 一个独立实现、零第三方运行时依赖的本地桥接器，把 Codex Desktop 使用的 OpenAI Responses 请求转换为 Kimi Code 的 OpenAI-compatible Chat Completions 请求。
 
 ```text
