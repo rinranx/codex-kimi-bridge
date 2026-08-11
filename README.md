@@ -23,6 +23,12 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 
 安装包解压并完成配置后，双击 `start-installed-codex-kimi-bridge.command` 即可启动本机桥接；它会调用已经全局安装的 `codex-kimi-bridge`。源码目录中的 `start-codex-kimi-bridge.command` 则可以直接启动未全局安装的开发版本。
 
+## 小白安装：交给 Codex
+
+不想手动合并 TOML 或逐条执行命令时，请打开 [把仓库交给 Codex 安装](INSTALL-WITH-CODEX.md)，把里面的完整提示词复制到 Codex Desktop。Codex 会先阅读项目文档，再根据你的 Key 类型和会员等级完成安装与配置。
+
+这是安全的辅助安装，不是完全无人值守：你仍需确认范围明确的写入操作，并在 macOS 钥匙串提示中亲自输入 API Key。不要把 Key 发到聊天中。
+
 ## 已实现
 
 - Responses 文本、图片和视频输入转换

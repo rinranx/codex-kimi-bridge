@@ -23,7 +23,7 @@ The complete installation kit contains the following core files. Never write an 
 
 - `codex-kimi-bridge-0.1.0.tgz`
 - `SHA256SUMS`
-- Chinese and English installation guides and README files
+- Chinese and English installation guides, README files, and Install-with-Codex prompt pages
 - The `templates/` directory
 - The `manage-codex-kimi-bridge` management skill
 - A double-click launcher plus license, security, and provenance documents

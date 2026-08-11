@@ -23,7 +23,7 @@ Codex Desktop 主代理
 
 - `codex-kimi-bridge-0.1.0.tgz`
 - `SHA256SUMS`
-- 中英文安装指南和 README
+- 中英文安装指南、README 和“交给 Codex 安装”提示词页面
 - `templates/` 目录
 - `manage-codex-kimi-bridge` 管理 Skill
 - 双击启动脚本以及许可证、安全和来源说明

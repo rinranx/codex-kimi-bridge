@@ -23,6 +23,12 @@ For a first-time installation, follow the [complete macOS installation guide](in
 
 After extracting the installation kit and completing the configuration, double-click `start-installed-codex-kimi-bridge.command` to start the local bridge. It invokes the globally installed `codex-kimi-bridge` command. The source tree also includes `start-codex-kimi-bridge.command`, which can run the development copy without a global installation.
 
+## Beginner setup: let Codex install it
+
+If you would rather not merge TOML or run every command manually, open [Install with Codex](INSTALL-WITH-CODEX.en.md) and paste its complete prompt into Codex Desktop. Codex will read the project documentation first, then configure the installation for your key type and membership tier.
+
+This is a secure assisted installation, not a fully unattended one. You still approve narrowly scoped writes and personally type the API key into the macOS Keychain prompt. Never send the key through chat.
+
 ## Implemented features
 
 - Responses text, image, and video input conversion
