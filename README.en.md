@@ -31,9 +31,30 @@ For manual setup:
 1. Download and extract the complete installation kit.
 2. Double-click `install-codex-kimi-bridge.command` to install the universal Rust binary at `~/.local/bin/codex-kimi-bridge`.
 3. Follow the [complete macOS guide](install/INSTALL-GUIDE.en.md) to store the key, merge the Codex configuration, and install the subagent.
-4. Double-click `start-codex-kimi-bridge.command` to start the local bridge.
+4. Choose one of the three startup methods below. For a first run, you can start with `start-codex-kimi-bridge.command`.
 
 The installer does not modify `~/.codex/config.toml`, Keychain, or shell profiles, and it never uninstalls an old command automatically.
+
+## Three startup methods
+
+Choose one after installation. All three run the same Rust binary and must not compete for port 8787.
+
+| Method | How to start | Persistence | Best for |
+| --- | --- | --- | --- |
+| Start from Codex | Say “Use `$manage-codex-kimi-bridge` to check and start the Rust bridge; do not run `doctor --live`.” | Usually tied to the current task or terminal session | Occasional use and zero bridge memory while stopped |
+| Double-click launcher | Open `start-codex-kimi-bridge.command` | Keep the Terminal window open; stop with `Control+C` | Visible logs and manual control |
+| macOS LaunchAgent | Open `install-launchagent.command` | Starts after login and recovers after an unexpected exit | Daily use and least friction |
+
+The LaunchAgent is only configuration read by the existing macOS `launchd`; it does not add another resident manager process. Memory belongs to the same Rust bridge process. A LaunchAgent-managed bridge continues after Codex Desktop quits.
+
+Inspect it with:
+
+```sh
+launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"
+curl -s http://127.0.0.1:8787/health
+```
+
+Double-click `uninstall-launchagent.command` to remove automatic startup. It moves only the plist to Trash and preserves the binary, Codex configuration, Keychain item, and logs. The bundled LaunchAgent uses the default Kimi Code HTTPS upstream; Kimi API Open Platform users must customize `ProgramArguments` before using it.
 
 ## Migrating from Node 0.1.0
 
@@ -293,4 +314,3 @@ The shared compatibility fixture is [`compat/responses-request.json`](compat/res
 ## License
 
 [MIT](LICENSE)
-

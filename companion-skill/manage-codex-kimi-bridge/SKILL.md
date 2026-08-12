@@ -36,6 +36,25 @@ For another Kimi Code model, pass `--model`. For a Kimi API Open Platform key, p
 
 Keep loopback binding and HTTPS defaults. Use `--allow-non-loopback` or `--allow-insecure-upstream` only after explaining the exposure and receiving explicit user direction.
 
+## Choose one of three startup modes
+
+When the user asks to “start” or “open” the bridge, diagnose first and use the mode they selected. Never create competing listeners on port 8787.
+
+1. **Codex on demand:** run `$HOME/.local/bin/codex-kimi-bridge serve` in the current task only when the user accepts that the process may end with the task or terminal session. This uses no bridge memory while stopped.
+2. **Visible Terminal launcher:** open the repository or installation kit's `start-codex-kimi-bridge.command`. The user can see sanitized logs and stop it with `Control+C`.
+3. **macOS LaunchAgent:** use the bundled `install-launchagent.command` only after the user explicitly asks for login-time automatic startup. It installs `~/Library/LaunchAgents/io.github.rinranx.codex-kimi-bridge.plist`, starts the same Rust binary in the background, and recovers it after an unexpected exit. The LaunchAgent is configuration for the existing `launchd`; it is not a second resident manager process.
+
+For an installed LaunchAgent, inspect without changing state:
+
+```sh
+launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"
+curl -s http://127.0.0.1:8787/health
+```
+
+Use `launchctl kickstart -k "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"` only when the installed service needs an explicit restart. Use the bundled `uninstall-launchagent.command` to stop automatic startup and move only the plist to Trash. Do not delete the binary, Codex configuration, Keychain item, or logs unless the user separately requests it.
+
+The bundled LaunchAgent is configured for the default Kimi Code upstream. Kimi API Open Platform users must customize its `ProgramArguments` with the correct HTTPS upstream and model before installation; do not silently apply the membership defaults.
+
 ## Check Codex configuration
 
 Inspect rather than rewrite configuration unless the user requests changes. Preserve unrelated TOML and avoid duplicate tables. The provider must include:
@@ -54,6 +73,7 @@ The auth command should retrieve the Keychain service and must not embed a secre
 - Model access error: compare `model`, context window, and auto-compact limit with the user's Kimi Code membership or Open Platform account.
 - `unsupported_tool_type`: report which Responses hosted tool cannot be translated; do not silently remove it.
 - Port occupied: determine whether Rust, the named Node fallback, an old 0.1.0 command, or an unknown service owns 8787. Ask before stopping anything.
+- LaunchAgent failed: inspect its `launchctl print` state and `~/Library/Logs/codex-kimi-bridge.error.log`. Repeated restarts usually indicate a port conflict; identify the listener before changing state.
 - A path resolves to old npm 0.1.0: explain the one-time command collision and ask before running `npm uninstall --global codex-kimi-bridge`.
 - Stream or tool-call failure: reproduce offline with `translate-request`, then run the relevant source tests. Custom-tool streaming remains experimental.
 - Long reasoning continuity: explain that reasoning state exists only in the current bridge process. Start a new Kimi subagent task after a mid-tool-chain restart.

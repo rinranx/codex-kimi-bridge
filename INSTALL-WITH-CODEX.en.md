@@ -35,10 +35,12 @@ Follow these requirements exactly:
 8. Read ~/.codex/config.toml and make a timestamped backup before editing. Merge only required [agents] and model_providers.codex_kimi_bridge keys; preserve unrelated settings, avoid duplicate TOML tables, and never place the key in TOML.
 9. Install ~/.codex/agents/kimi_frontend.toml from the repository template. Adjust model, model_context_window, and model_auto_compact_token_limit for my access, and keep sandbox_mode = "read-only".
 10. Install companion-skill/manage-codex-kimi-bridge under ~/.codex/skills/. Keep the bridge on 127.0.0.1 and the upstream on HTTPS; never enable --allow-non-loopback or --allow-insecure-upstream.
-11. On startup, require output containing implementation: rust. First run version, checksum, health, doctor --json, and offline translate-request checks that do not contact Kimi.
-12. doctor --live and request make real Kimi calls and consume quota. Ask for my separate explicit approval immediately before either command. If I do not approve, skip them and state that no live call was made.
-13. Suggest node/ only after confirming a Rust compatibility problem. Its command must be codex-kimi-bridge-node, and it cannot listen on 8787 at the same time as Rust.
-14. At completion report: downloaded file and SHA-256, installed path and version, key type, model, upstream, configuration files changed and backed up, Multi-agent v2 status, whether the bridge is running, how to start it next time, and whether any real Kimi request was sent.
+11. Let me choose one of three startup methods and explain the tradeoffs: A) call manage-codex-kimi-bridge from Codex for on-demand startup; B) double-click start-codex-kimi-bridge.command in a visible Terminal; C) install the macOS LaunchAgent for login-time background startup and recovery after an unexpected exit. Never run competing listeners on 8787. The LaunchAgent configuration adds no separate resident manager process; memory belongs to the same Rust bridge.
+12. Install the bundled install-launchagent.command only if I choose C. Confirm that its plist uses the absolute ~/.local/bin/codex-kimi-bridge path, remains loopback-only, and explain uninstall-launchagent.command. A Kimi API Open Platform setup must not reuse the default Kimi Code LaunchAgent arguments unchanged.
+13. On startup, require output containing implementation: rust. First run version, checksum, health, doctor --json, and offline translate-request checks that do not contact Kimi.
+14. doctor --live and request make real Kimi calls and consume quota. Ask for my separate explicit approval immediately before either command. If I do not approve, skip them and state that no live call was made.
+15. Suggest node/ only after confirming a Rust compatibility problem. Its command must be codex-kimi-bridge-node, and it cannot listen on 8787 at the same time as Rust.
+16. At completion report: downloaded file and SHA-256, installed path and version, key type, model, upstream, configuration files changed and backed up, Multi-agent v2 status, my selected startup method, whether the bridge is running, how to start it next time, and whether any real Kimi request was sent.
 ```
 
 ## Expected result
@@ -49,6 +51,7 @@ Follow these requirements exactly:
 - Existing Codex settings remain intact with no duplicate TOML tables
 - `kimi_frontend` matches the user's membership or platform access
 - Multi-agent v2 can schedule the custom subagent
+- One of Codex on demand, visible Terminal, or LaunchAgent has been explicitly selected
 - No real Kimi request was sent without approval
 
 If Codex cannot read GitHub, manually download the [complete macOS kit](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip), provide the extracted folder, and change the prompt's first line to “Install from the local installation-kit folder I provided.”

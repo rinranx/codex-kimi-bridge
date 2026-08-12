@@ -31,9 +31,30 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 1. 下载并解压完整安装包。
 2. 双击 `install-codex-kimi-bridge.command`，把通用 Rust 二进制安装到 `~/.local/bin/codex-kimi-bridge`。
 3. 按 [完整 macOS 安装指南](install/INSTALL-GUIDE.zh-CN.md) 保存 Key、合并 Codex 配置并安装子代理。
-4. 双击 `start-codex-kimi-bridge.command` 启动本机桥接。
+4. 从下一节的三种方式中任选一种启动本机桥接；第一次使用可先双击 `start-codex-kimi-bridge.command`。
 
 安装器不会修改 `~/.codex/config.toml`、Keychain 或 shell 配置，也不会自动卸载旧命令。
+
+## 三种启动方式
+
+安装完成后可以任选一种；三种方式运行的是同一个 Rust 二进制，不能同时重复监听 8787。
+
+| 方式 | 如何启动 | 是否常驻 | 适合场景 |
+| --- | --- | --- | --- |
+| 在 Codex 中启动 | 说“使用 `$manage-codex-kimi-bridge` 检查并启动 Rust 桥接；不要运行 `doctor --live`” | 通常随当前任务或终端会话结束 | 偶尔使用、希望不用时占用为 0 |
+| 双击启动器 | 双击 `start-codex-kimi-bridge.command` | 保持终端窗口打开；`Control+C` 停止 | 希望看到日志并手动控制 |
+| macOS LaunchAgent | 双击 `install-launchagent.command` | 登录后后台自动启动，异常退出自动恢复 | 每天使用，最省事 |
+
+LaunchAgent 只是一份由 macOS `launchd` 读取的配置，不会再创建一层常驻管理程序；内存占用来自同一个 Rust 桥接进程。退出 Codex Desktop 后，LaunchAgent 管理的桥接仍会运行。
+
+查看状态：
+
+```sh
+launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"
+curl -s http://127.0.0.1:8787/health
+```
+
+不再需要自动启动时，双击 `uninstall-launchagent.command`。它只卸载自动启动并把 plist 移到废纸篓，不删除桥接二进制、Codex 配置、Keychain 或日志。随附 LaunchAgent 使用默认 Kimi Code HTTPS 上游；Kimi API 开放平台用户应先自定义 `ProgramArguments`，不要直接套用默认模板。
 
 ## 从 Node 0.1.0 迁移
 

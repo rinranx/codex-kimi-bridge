@@ -204,7 +204,27 @@ cp -R companion-skill/manage-codex-kimi-bridge "$HOME/.codex/skills/"
 
 ## 11. 启动与检查
 
-Kimi Code Allegretto 默认配置可直接双击：
+安装后任选一种启动方式：
+
+| 方式 | 操作 | 特点 |
+| --- | --- | --- |
+| Codex 按需启动 | 对 Codex 说“使用 `$manage-codex-kimi-bridge` 检查并启动 Rust 桥接；不要运行 `doctor --live`” | 不用时可完全退出，但通常依赖当前任务／终端会话 |
+| 可见终端启动 | 双击 `start-codex-kimi-bridge.command` | 可看日志，按 `Control+C` 停止 |
+| 登录后自动启动 | 双击 `install-launchagent.command` | 后台常驻，异常退出自动恢复，适合每天使用 |
+
+三种方式启动的是同一个 Rust 二进制，不要同时重复运行。LaunchAgent 本身只是 macOS `launchd` 的配置，不增加独立管理进程；占用内存的是同一个桥接进程。
+
+### 方式 A：让 Codex 按需启动
+
+在 Codex Desktop 中发送：
+
+```text
+使用 $manage-codex-kimi-bridge 检查并启动 Rust 桥接。只做本机健康检查，不要运行 doctor --live。
+```
+
+### 方式 B：双击启动器
+
+Kimi Code 默认配置可直接双击：
 
 ```text
 start-codex-kimi-bridge.command
@@ -217,6 +237,34 @@ $HOME/.local/bin/codex-kimi-bridge serve --model k3-256k
 ```
 
 窗口显示 `implementation: rust` 即为新默认版。保持窗口打开；停止时按 `Control+C`。
+
+### 方式 C：安装 macOS LaunchAgent
+
+双击：
+
+```text
+install-launchagent.command
+```
+
+它会生成并加载：
+
+```text
+~/Library/LaunchAgents/io.github.rinranx.codex-kimi-bridge.plist
+```
+
+登录后会自动启动，异常退出时由 `launchd` 恢复。标准日志位于 `~/Library/Logs/codex-kimi-bridge.log`，错误日志位于 `~/Library/Logs/codex-kimi-bridge.error.log`；日志不包含请求正文或凭据。
+
+查看 LaunchAgent：
+
+```sh
+launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"
+```
+
+随附模板使用默认 Kimi Code 上游。Kimi API 开放平台用户需要先修改 plist 的 `ProgramArguments`，加入对应的 `--upstream` 和 `--model`，或者选择前两种启动方式。
+
+不再需要自动启动时，双击 `uninstall-launchagent.command`。它会停止该 LaunchAgent，并把 plist 移到废纸篓；不会删除二进制、Codex 配置、Keychain 或日志。
+
+### 健康检查
 
 另开终端执行离线／本机检查：
 
@@ -247,11 +295,13 @@ $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 - **macOS 阻止打开**：先核对 SHA-256，再右键 `.command` 选择“打开”。
 - **401／missing_api_key**：检查 Keychain 服务名和 provider 的 auth 命令，不要输出 Key 本身。
 - **模型无权限**：按会员等级同时修改子代理的三项模型配置；新建任务后重试。
+- **LaunchAgent 未启动**：运行 `launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"`，并查看 `~/Library/Logs/codex-kimi-bridge.error.log`。
+- **LaunchAgent 反复重启**：通常是 8787 被其他程序占用。先识别占用者，不要直接结束未知进程。
 - **Rust 兼容问题**：停止 Rust 版后，按 [`node/install/INSTALL-GUIDE.zh-CN.md`](../node/install/INSTALL-GUIDE.zh-CN.md) 安装不同命令名的 Node 回退版。
 
 ## 13. 卸载
 
-停止桥接后，把二进制移到废纸篓：
+如果安装过 LaunchAgent，先双击 `uninstall-launchagent.command`。然后停止其他手动桥接，把二进制移到废纸篓：
 
 ```sh
 mv "$HOME/.local/bin/codex-kimi-bridge" "$HOME/.Trash/codex-kimi-bridge"

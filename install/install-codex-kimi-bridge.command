@@ -75,7 +75,7 @@ print "安装完成：$TARGET_BIN"
 print "版本：$INSTALLED_VERSION (Rust)"
 print ""
 print "安装器没有修改 Codex 配置、Keychain 或 shell PATH。"
-print "下一步请阅读 install/INSTALL-GUIDE.zh-CN.md，配置完成后双击 start-codex-kimi-bridge.command。"
+print "下一步请阅读 install/INSTALL-GUIDE.zh-CN.md，配置完成后从三种启动方式中任选一种。"
 if [[ -t 0 ]]; then
   print ""
   print "按回车关闭窗口。"

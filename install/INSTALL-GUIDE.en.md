@@ -182,13 +182,55 @@ The skill manages and diagnoses the bridge later; it is not the bridge executabl
 
 ## 11. Start and verify
 
-For the default Allegretto setup, double-click `start-codex-kimi-bridge.command`. For another Kimi Code model, start from a terminal, for example:
+Choose one startup method after installation:
+
+| Method | Action | Characteristics |
+| --- | --- | --- |
+| Codex on demand | Tell Codex, “Use `$manage-codex-kimi-bridge` to check and start the Rust bridge; do not run `doctor --live`.” | Can use zero bridge memory while stopped, but usually depends on the current task or terminal session |
+| Visible Terminal | Double-click `start-codex-kimi-bridge.command` | Visible logs; stop with `Control+C` |
+| Login-time LaunchAgent | Double-click `install-launchagent.command` | Background service with recovery after an unexpected exit; best for daily use |
+
+All three run the same Rust binary; never start competing listeners. A LaunchAgent is configuration for the existing macOS `launchd`, not another resident manager process.
+
+### Method A: start from Codex
+
+Send this in Codex Desktop:
+
+```text
+Use $manage-codex-kimi-bridge to check and start the Rust bridge. Run local health checks only; do not run doctor --live.
+```
+
+### Method B: double-click the launcher
+
+For the default Kimi Code setup, double-click `start-codex-kimi-bridge.command`. For another Kimi Code model, start from a terminal, for example:
 
 ```sh
 $HOME/.local/bin/codex-kimi-bridge serve --model k3-256k
 ```
 
 The window should show `implementation: rust`. Keep it open; press `Control+C` to stop.
+
+### Method C: install the macOS LaunchAgent
+
+Double-click `install-launchagent.command`. It creates and loads:
+
+```text
+~/Library/LaunchAgents/io.github.rinranx.codex-kimi-bridge.plist
+```
+
+It starts after login and is recovered by `launchd` after an unexpected exit. Standard logs are written to `~/Library/Logs/codex-kimi-bridge.log`; sanitized errors go to `~/Library/Logs/codex-kimi-bridge.error.log`. Request bodies and credentials are not logged.
+
+Inspect it with:
+
+```sh
+launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"
+```
+
+The bundled template uses the default Kimi Code upstream. Kimi API Open Platform users must first add the correct `--upstream` and `--model` to `ProgramArguments`, or choose one of the first two methods.
+
+Double-click `uninstall-launchagent.command` to stop it and move only the plist to Trash. The binary, Codex configuration, Keychain item, and logs remain.
+
+### Health checks
 
 In another terminal, run local-only checks:
 
@@ -213,11 +255,13 @@ Restart Codex Desktop, then ask the primary agent to use `kimi_frontend` to revi
 - **macOS blocks the launcher:** verify SHA-256, then right-click and choose Open.
 - **401 / missing_api_key:** inspect the Keychain service name and provider auth command without displaying the secret.
 - **Model access error:** update all three agent model fields for your membership and create a new task.
+- **LaunchAgent did not start:** run `launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"` and inspect `~/Library/Logs/codex-kimi-bridge.error.log`.
+- **LaunchAgent restarts repeatedly:** port 8787 is usually occupied. Identify the owner first; never terminate an unknown process.
 - **Rust compatibility problem:** stop Rust and follow [`node/install/INSTALL-GUIDE.en.md`](../node/install/INSTALL-GUIDE.en.md) for the separately named Node fallback.
 
 ## 13. Uninstall
 
-After stopping the bridge, move the binary to Trash:
+If a LaunchAgent is installed, double-click `uninstall-launchagent.command` first. Then stop any manually started bridge and move the binary to Trash:
 
 ```sh
 mv "$HOME/.local/bin/codex-kimi-bridge" "$HOME/.Trash/codex-kimi-bridge"

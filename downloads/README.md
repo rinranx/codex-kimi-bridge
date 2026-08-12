@@ -12,3 +12,5 @@ The default release is Rust `codex-kimi-bridge 0.2.0-alpha.1`.
 Verify the universal kit against `INSTALL-KIT-SHA256.txt`. Verify architecture packages and the Node fallback against `SHA256SUMS`.
 
 The Rust alpha is ad-hoc signed but not Apple-notarized. Read the root installation guide before bypassing a Gatekeeper warning.
+
+The universal kit also contains three startup choices: Codex-managed on demand, a visible Terminal launcher, and optional login-time LaunchAgent scripts.
