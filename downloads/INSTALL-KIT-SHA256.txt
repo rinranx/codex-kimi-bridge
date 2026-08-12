@@ -1,1 +1,1 @@
-926a36588325b3e562ea89df591c6f266affcb83367cca4311ca6dd84db05e28  codex-kimi-bridge-macos-install-kit-0.1.0.zip
+59f8c7be9ec22cd09728a6c4494c55650e121f72dde81140ff2a940ee3020d9a  codex-kimi-bridge-macos-install-kit-0.1.0.zip

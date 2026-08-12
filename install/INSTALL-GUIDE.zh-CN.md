@@ -192,6 +192,8 @@ sed -n '1,220p' "$HOME/.codex/agents/kimi_frontend.toml"
 - `model_reasoning_effort = "xhigh"`，桥接器会映射为 Kimi 的 `max`
 - `sandbox_mode = "read-only"`
 
+模板中的 `developer_instructions` 是一套可以直接使用的前端体验与视觉审查角色示例，定义了检查重点、输出结构和只读边界。完整内容与自定义说明见 [中文 README 的角色指令示例](../README.md#kimi_frontend-角色指令示例)。
+
 随附模板使用的是已经实测的 Allegretto + K3 1M 配置。如果你的会员等级不同，请从 [中文 README 的会员模型表](../README.md#按会员等级选择-kimi-code-模型) 选择有权限的模型和上下文窗口，修改 `kimi_frontend.toml`，并在启动或诊断桥接时使用相同的模型 ID。
 
 ## 第 6 步：启动桥接

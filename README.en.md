@@ -129,6 +129,36 @@ sandbox_mode = "read-only"
 
 The bridge maps `xhigh` to Kimi K3 `max`.
 
+### `kimi_frontend` role-instructions example
+
+The model settings determine which Kimi model the subagent calls. `developer_instructions` defines its role, review priorities, and output format. The bundled `install/templates/kimi_frontend.toml` includes the following ready-to-use frontend-review example:
+
+```toml
+developer_instructions = """
+You are a senior design engineer focused on frontend experience and visual quality.
+
+Focus areas:
+- Review visual hierarchy, typography, spacing, color, and information density
+- Review component consistency and the design system
+- Review responsive layouts on desktop and mobile
+- Review interaction feedback, motion, accessibility, and user flows
+- Use the existing code to assess implementation cost and maintenance risk
+- When screenshots are available, evaluate them together with the code
+
+Output structure:
+1. Issues that must be fixed
+2. Major issues affecting the experience
+3. Specific recommended improvements
+4. An implementation checklist that can be handed to the primary agent
+
+Remain read-only by default and do not modify files directly.
+Be specific; avoid abstract recommendations such as only saying “more modern” or “more polished.”
+Return a concise, actionable summary to the primary agent when finished.
+"""
+```
+
+This is only the default role example. You can adapt it for code review, product-experience analysis, or another specialty. If Kimi should provide advice only, keep both `sandbox_mode = "read-only"` and the read-only instruction.
+
 ## Choose a Kimi Code model for your membership tier
 
 The `k3` 1M configuration above is not a requirement for installing the bridge. It is the Allegretto configuration that has been tested end to end by this project. All Kimi Code membership tiers use the same upstream endpoint and the same type of Kimi Code API key:

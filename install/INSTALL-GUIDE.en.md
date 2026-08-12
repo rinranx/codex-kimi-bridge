@@ -192,6 +192,8 @@ The key settings are:
 - `model_reasoning_effort = "xhigh"`, which the bridge maps to Kimi `max`
 - `sandbox_mode = "read-only"`
 
+The template's `developer_instructions` is a ready-to-use role example for frontend experience and visual review. It defines the review priorities, output structure, and read-only boundary. See the [role-instructions example in the English README](../README.en.md#kimi_frontend-role-instructions-example) for the complete text and customization notes.
+
 The bundled template is the tested Allegretto configuration using K3 with a 1M-token context window. If your membership tier differs, select a permitted model and context window from the [model table in the English README](../README.en.md#choose-a-kimi-code-model-for-your-membership-tier), update `kimi_frontend.toml`, and use the same model ID when starting or diagnosing the bridge.
 
 ## Step 6: Start the bridge
