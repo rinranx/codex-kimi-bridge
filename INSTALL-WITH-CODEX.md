@@ -2,98 +2,59 @@
 
 **简体中文** | [English](INSTALL-WITH-CODEX.en.md)
 
-如果你不熟悉终端或 TOML，可以把本项目仓库交给 Codex，让它按官方文档完成大部分安装和配置工作。
+不熟悉终端或 TOML 时，可以把项目地址交给 Codex Desktop，让它安装默认的 Rust 单文件版、配置 provider、子代理和管理 Skill。
 
-这是一种接近一键的**辅助安装**，不是完全无人值守安装。为了保护你的电脑和 API Key，仍有两件事需要你亲自完成：
+这接近一键安装，但为了安全仍需要你：
 
-1. 确认 Codex 对 `~/.codex` 等明确位置的写入操作。
-2. 在 macOS 钥匙串的安全输入提示中直接输入 API Key；不要把 Key 发到聊天里。
+1. 审核对 `~/.local/bin`、`~/.codex` 等明确路径的写入授权。
+2. 只在 macOS Keychain 的终端安全提示中输入 API Key，绝不把 Key 发到聊天。
+3. 决定是否运行会实际连接 Kimi 并消耗少量额度的测试。
 
-## 开始前准备
+安装者不需要 Rust、Node.js 或 npm。只有默认 Rust 版遇到兼容问题时，才使用 `node/` 中独立命名的 `codex-kimi-bridge-node`。
 
-- 一台 Mac，并已安装和登录 Codex Desktop。
-- Node.js 20 或更高版本；若尚未安装，可以让 Codex 先检查并指导你安装。
-- 一枚可用的 Kimi Code 会员 API Key，或 Kimi API 开放平台按量付费 Key。
-- 如果使用 Kimi Code，最好先确认会员等级：Andante、Moderato、Allegretto 或更高。
+## 使用方法
 
-## 最简单的安装方法
-
-1. 在 Codex Desktop 新建一个任务。
-2. 复制下面的完整提示词并发送。
-3. 如果提示词中没有填写 Key 类型或会员等级，只回答 Codex 对这一项的询问。
-4. 审核并允许范围明确的安装操作。
-5. Codex 要求保存 API Key 时，在它打开或指定的终端提示中输入；不要粘贴到对话框。
-6. 只有你同意时，Codex 才应运行会实际连接 Kimi、可能消耗额度的测试。
-
-可以先把这一行填写好，和提示词一起发送：
+在 Codex Desktop 新建任务，先填写这一行：
 
 ```text
-我的 Key 类型／会员等级：________________
+我的 Key 类型／会员等级：Kimi Code Andante／Moderato／Allegretto 及以上／Kimi API 开放平台（选择一项）
 ```
 
-## 可直接复制给 Codex 的提示词
+然后把下面整段复制发送：
 
 ```text
-请帮我从下面这个官方项目仓库安装并配置 Codex Kimi Bridge：
+请从这个项目安装并配置默认的 Rust 版 Codex Kimi Bridge：
 
 https://github.com/rinranx/codex-kimi-bridge
 
 请严格遵守以下要求：
 
-1. 先阅读仓库中的 README.md、INSTALL-WITH-CODEX.md 和 install/INSTALL-GUIDE.zh-CN.md，再执行安装。
-2. 只使用这个仓库提供的 codex-kimi-bridge，不要使用 npm 上名字相似的第三方桥接包。
-3. 检查 Node.js、Codex Desktop 和 Multi-agent v2 状态；不要使用 sudo npm install，也不要修改整个主目录或 npm 缓存的权限。
-4. 如果我还没有说明 Key 类型和会员等级，请先问我是：
-   - Kimi Code Andante
-   - Kimi Code Moderato
-   - Kimi Code Allegretto 或以上
-   - Kimi API 开放平台按量付费 Key
-5. 根据我的等级选择正确的模型、调用地址、上下文窗口和自动压缩值，不要默认所有人都有 Allegretto 权限。Kimi Code 与开放平台的 Key、模型和调用地址不能混用。
-6. 不要让我把 API Key 粘贴到聊天中。请使用 macOS Keychain 的安全输入命令，并让我直接在终端提示中输入。
-7. 修改 ~/.codex/config.toml 前先读取现有内容并创建备份。合并 [features]、[agents] 和 provider 配置，不要覆盖无关配置，也不要创建重复的 TOML 表。
-8. 安装 kimi_frontend 子代理和仓库附带的 manage-codex-kimi-bridge 管理 Skill，并保持 sandbox_mode = "read-only"。
-9. 桥接只允许监听 127.0.0.1，上游必须使用 HTTPS；不要启用 --allow-non-loopback 或 --allow-insecure-upstream。
-10. 先运行不消耗 Kimi 额度的检查。任何真实 Kimi 测试前都要先征得我的确认。
-11. 完成后告诉我：
-    - 安装了哪些文件
-    - 使用的模型和上游地址
-    - 桥接是否已启动
-    - 下次怎样启动
-    - 是否运行过真实 Kimi 请求
-
-不要显示、记录或复述我的 API Key。
+1. 先完整阅读 README.md、INSTALL-WITH-CODEX.md、install/INSTALL-GUIDE.zh-CN.md、SECURITY.md 和 downloads 中的校验文件。
+2. 默认安装 Rust 单文件版 codex-kimi-bridge 0.2.0-alpha.1。不要安装名字相似的 npm 包，也不要把 node/ 回退版当成默认版。新安装不要求 Rust、Node.js 或 npm。
+3. 只从本仓库 downloads/ 下载 macOS 安装包，先核对 SHA-256，再安装到 ~/.local/bin/codex-kimi-bridge。不要使用 sudo。
+4. 安装前只读检查 command -v codex-kimi-bridge 和 8787 端口。如果发现旧的 npm 0.1.0 同名命令或未知占用，先报告具体路径／进程并征得我的确认；不要擅自卸载、覆盖或结束进程。得到确认后，旧官方 npm 包可用 npm uninstall --global codex-kimi-bridge 移除。
+5. 如果我还没说明 Key 类型和会员等级，请先问清。根据 README 的表格选择正确的模型、上游、上下文窗口和自动压缩值；不要默认所有人都有 Allegretto 1M 权限。Kimi Code 会员 Key 与 Kimi API 开放平台 Key、模型和地址不能混用。
+6. 不要让我把 API Key 粘贴到聊天。使用 macOS Keychain 命令，让我只在终端安全提示中输入；服务名保持 codex-kimi-code-api-key。不要显示、记录或复述 Key。
+7. 检查 Codex Multi-agent v2。若尚未启用，优先指导我在 Desktop 实验功能中开启；只有当前版本需要时才安全合并 multi_agent_v2 = true，不能创建重复的 [features] 表。
+8. 修改 ~/.codex/config.toml 前读取现有内容并创建带时间戳备份。只合并 [agents] 和 model_providers.codex_kimi_bridge 等所需键，不覆盖无关配置，不创建重复 TOML 表，不把 Key 写进 TOML。
+9. 从仓库模板安装 ~/.codex/agents/kimi_frontend.toml，按我的等级修改 model、model_context_window 和 model_auto_compact_token_limit，并保持 sandbox_mode = "read-only"。
+10. 安装 companion-skill/manage-codex-kimi-bridge 到 ~/.codex/skills/。桥接只监听 127.0.0.1，上游使用 HTTPS；不要开启 --allow-non-loopback 或 --allow-insecure-upstream。
+11. 启动时必须确认输出包含 implementation: rust。先运行版本、SHA-256、health、doctor --json 和离线 translate-request 等不会调用 Kimi 的检查。
+12. doctor --live 或 request 会真实调用 Kimi 并消耗额度，必须在运行前单独征得我的明确同意。没有同意就跳过，并在结果中说明未运行真实请求。
+13. 只有 Rust 版经确认存在兼容问题时，才提出 node/ 回退方案。回退命令必须是 codex-kimi-bridge-node，并且不能与 Rust 版同时监听 8787。
+14. 完成后列出：下载文件及 SHA-256、安装路径与版本、Key 类型、模型、上游、改动和备份的配置文件、Multi-agent v2 状态、桥接是否启动、下次怎样启动、是否发出过真实 Kimi 请求。
 ```
 
-## Codex 应该替你完成什么
+## Codex 应完成的结果
 
-在你授权的范围内，Codex 应该：
+- `~/.local/bin/codex-kimi-bridge --version` 输出 `0.2.0-alpha.1`
+- `/health` 显示 `implementation: rust`
+- API Key 只在 Keychain 中
+- `~/.codex/config.toml` 保留原配置且没有重复表
+- `kimi_frontend` 的模型权限与实际会员／平台一致
+- Multi-agent v2 已可调度自定义子代理
+- 未经确认没有发出真实 Kimi 请求
 
-- 阅读项目文档，确认下载内容和 SHA-256。
-- 检查 Node.js、Codex Desktop、Multi-agent v2 和现有 Codex 配置。
-- 备份并安全合并 `~/.codex/config.toml`，不覆盖无关设置。
-- 安装桥接命令、`kimi_frontend` 子代理和管理 Skill。
-- 按 Key 类型与会员等级选择匹配的模型、上游地址和上下文设置。
-- 先做语法、版本、健康状态等不调用 Kimi 的检查。
-- 清楚报告它修改了什么，以及是否曾发出真实 Kimi 请求。
+若 Codex 无法读取 GitHub，可先手动下载[完整 macOS 安装包](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip)，把解压后的文件夹交给它，并把提示词第一句改为“请从我提供的本地安装包安装”。
 
-Codex 不应该：
-
-- 要求你把 API Key 发到聊天中，或把它写进普通配置文件。
-- 使用名称相似但并非来自本仓库的包。
-- 用 `sudo npm install`，或为了修复 npm 而改动整个主目录的权限。
-- 未经确认执行真实 Kimi 测试。
-- 把本地服务暴露到 `0.0.0.0`，或关闭上游 HTTPS 限制。
-
-## 如果 Codex 无法直接读取仓库
-
-你可以手动下载 [macOS 完整安装包](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.1.0.zip)，解压后把文件夹交给 Codex，并发送同一段提示词。把第一句话改成：
-
-```text
-请从我提供的本地安装包文件夹安装并配置 Codex Kimi Bridge。
-```
-
-如果 Codex 无法写入 `~/.codex`，只批准它对安装指南明确列出的文件进行写入，不必开放整个主目录。
-
-仓库附带的 `manage-codex-kimi-bridge` 是安装完成后的管理 Skill，用于启动、停止、诊断和切换模型；它本身不是首次安装器。
-
-需要了解每一步时，请阅读 [完整 macOS 安装指南](install/INSTALL-GUIDE.zh-CN.md)。模型和会员等级说明见 [中文 README](README.md#按会员等级选择-kimi-code-模型)。
+更细的人工步骤见[完整安装指南](install/INSTALL-GUIDE.zh-CN.md)。

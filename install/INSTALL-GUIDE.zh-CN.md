@@ -1,83 +1,136 @@
-# Codex Kimi Bridge 全新安装指南（macOS）
+# Codex Kimi Bridge：macOS 完整安装指南
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-适用版本：`codex-kimi-bridge 0.1.0`
-配置核对日期：2026-08-11
+本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.2.0-alpha.1`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
 
-这份指南用于在一台 Mac 上首次安装以下工作流：
+## 1. 准备
 
-```text
-Codex Desktop 主代理
-        │
-        └── kimi_frontend 子代理（Kimi K3 / 只读）
-                    │
-                    └── 本机桥接 127.0.0.1:8787
-                              │
-                              └── Kimi Code HTTPS API
-```
+需要：
 
-## 安装包内容
+- macOS 与 Codex Desktop
+- 可用的 Kimi Code 会员 Key，或 Kimi API 开放平台 Key
+- 已启用的 Codex **Multi-agent v2**
 
-完整安装包包含以下核心内容；不要把 API Key 写进任何文件：
+不要把 API Key 发到聊天、截图或 TOML 文件中。
 
-- `codex-kimi-bridge-0.1.0.tgz`
-- `SHA256SUMS`
-- 中英文安装指南、README 和“交给 Codex 安装”提示词页面
-- `templates/` 目录
-- `manage-codex-kimi-bridge` 管理 Skill
-- 双击启动脚本以及许可证、安全和来源说明
+## 2. 下载并核对安装包
 
-推荐下载完整的 `codex-kimi-bridge-macos-install-kit-0.1.0.zip`，校验 SHA-256 后再解压安装。
+推荐下载：
 
-## 第 1 步：安装 Codex Desktop 和 Node.js
+<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
 
-1. 安装并登录最新版 Codex Desktop。
-2. 安装 Node.js 20 或更高版本。已有 Homebrew 时可运行：
-
-   ```sh
-   brew install node
-   ```
-
-   没有 Homebrew 时，从 Node.js 官方网站安装当前受支持版本即可。
-
-3. 验证：
-
-   ```sh
-   node --version
-   npm --version
-   ```
-
-   `node --version` 必须至少为 `v20`。
-
-## 第 2 步：验证并安装桥接包
-
-把安装包解压到例如 `~/Documents/CodexKimiBridge`，然后进入该目录：
+下载同目录中的 `INSTALL-KIT-SHA256.txt`，然后在终端进入下载目录运行：
 
 ```sh
-cd "$HOME/Documents/CodexKimiBridge"
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip
+```
+
+输出应与校验文件完全一致。本 alpha 尚未做 Apple 公证；首次打开 `.command` 时，可能需要右键文件并选择“打开”。
+
+## 3. 第一次从 Node 0.1.0 迁移时清理命令冲突
+
+全新安装者跳过本节。
+
+旧 npm 版与新 Rust 版都曾使用 `codex-kimi-bridge` 命令。先在旧桥终端按 `Control+C`，再运行：
+
+```sh
+npm uninstall --global codex-kimi-bridge
+command -v codex-kimi-bridge
+```
+
+第二条命令不应再指向旧 npm 位置。不要删除 Keychain 项目、provider 配置或 `kimi_frontend.toml`；它们可以继续使用。
+
+## 4. 安装 Rust 二进制
+
+解压完整安装包，然后双击：
+
+```text
+install-codex-kimi-bridge.command
+```
+
+安装位置固定为：
+
+```text
+~/.local/bin/codex-kimi-bridge
+```
+
+安装器会验证版本。若发现其他位置的同名命令，会停止并提示，不会自动卸载；更新已有的 `~/.local/bin` 版本前会询问并保留备份。安装器不会修改 Codex 配置、Keychain 或 shell PATH。
+
+验证：
+
+```sh
+$HOME/.local/bin/codex-kimi-bridge --version
 ```
 
 预期输出：
 
 ```text
-codex-kimi-bridge-0.1.0.tgz: OK
+0.2.0-alpha.1
 ```
 
-安装为全局命令：
+如果希望在任意终端直接输入命令，可把下面一行加入 `~/.zprofile`，再新开终端：
 
 ```sh
-npm install --global ./codex-kimi-bridge-0.1.0.tgz
-command -v codex-kimi-bridge
-codex-kimi-bridge --version
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-预期版本为 `0.1.0`。不要使用 `sudo npm install`。若 Homebrew Node 的全局安装出现权限错误，先保留原始错误信息，不要修改整个主目录权限。
+这一步不是双击启动器的必要条件。
 
-## 第 3 步：在 macOS Keychain 保存 Kimi Code API Key
+## 5. 启用 Multi-agent v2
 
-建议在 Kimi Code 控制台创建一枚专用于此桥接的 Kimi Code API Key。不要通过聊天、配置文件或截图传递 Key。
+在 Codex Desktop 的“设置 → 实验功能／功能”中启用 **Multi-agent v2**，然后完全退出并重新打开 Codex Desktop。
+
+也可以检查：
+
+```sh
+codex features list | grep -E '^multi_agent(_v2)?[[:space:]]'
+```
+
+若版本需要手动配置，请把这一项合并到 `~/.codex/config.toml` 中现有的 `[features]` 表；不要创建重复表：
+
+```toml
+[features]
+multi_agent_v2 = true
+```
+
+如果设置中没有开关，但 Codex 已能显示和调度自定义子代理，则无需重复添加。
+
+## 6. 选择 Key、模型与上游
+
+### Kimi Code 会员 Key
+
+所有会员 Key 使用同一个上游：
+
+```text
+https://api.kimi.com/coding/v1/chat/completions
+```
+
+按实际权限设置 `~/.codex/agents/kimi_frontend.toml`：
+
+| 会员 | `model` | `model_context_window` | `model_auto_compact_token_limit` |
+| --- | --- | ---: | ---: |
+| Andante／所有会员 | `kimi-for-coding` | `262144` | `230000` |
+| Moderato（推荐节省配额） | `k3-256k` | `262144` | `230000` |
+| Moderato（K3） | `k3` | `262144` | `230000` |
+| Allegretto 及以上 | `k3` | `1048576` | `900000` |
+| Allegretto 及以上（高速） | `kimi-for-coding-highspeed` | `262144` | `230000` |
+
+安装包模板默认使用 Allegretto 的 `k3` 1M 配置。没有相应权限时必须同时修改上表三项。
+
+### Kimi API 开放平台 Key
+
+开放平台与会员 Key 是不同产品，Key、模型和上游不能混用。启动桥接时需要显式指定上游，例如：
+
+```sh
+$HOME/.local/bin/codex-kimi-bridge serve \
+  --upstream https://api.moonshot.ai/v1/chat/completions \
+  --model kimi-k3
+```
+
+中国大陆开放平台把上游换为 `https://api.moonshot.cn/v1/chat/completions`。同时把子代理里的 `model` 改为账号实际可用的开放平台模型。开放平台路线属于进阶配置；请以 Kimi 官方控制台显示的模型权限为准。
+
+## 7. 把 Key 保存到 macOS Keychain
 
 运行：
 
@@ -89,64 +142,28 @@ codex-kimi-bridge --version
   -w
 ```
 
-必须把 `-w` 放在最后。终端出现提示后粘贴 Key；输入过程不会显示字符。
+保持 `-w` 在最后。终端出现提示后直接输入 Key；输入不会回显。服务名仍是 `codex-kimi-code-api-key`，不需要因为项目使用 Rust 而改名。
 
-只验证条目是否存在，不输出 Key：
+以后更换 Key，重新运行同一命令即可，然后重启 Codex Desktop 或新建任务。
 
-```sh
-/usr/bin/security find-generic-password \
-  -s "codex-kimi-code-api-key" >/dev/null \
-  && echo "Kimi Keychain item: OK"
-```
+## 8. 合并 Codex provider 配置
 
-## 第 4 步：配置 Codex 自定义 provider
-
-个人 provider 必须写入用户级配置 `~/.codex/config.toml`，不要写进项目的 `.codex/config.toml`。
-
-先确认 Codex 的 Multi-agent v2 已启用：
-
-1. 打开 Codex Desktop 设置。
-2. 在“实验功能”或“功能”页面找到 **Multi-agent v2**。
-3. 如果它存在但尚未开启，请将其开启。
-4. 较新的 Codex 版本可能已默认启用并将其标记为稳定功能；如果设置中没有开关，但 Codex 已能显示和调度子代理，则无需额外操作。
-
-也可以在终端检查：
+若配置文件已经存在，先备份：
 
 ```sh
-codex features list | grep -E '^multi_agent(_v2)?[[:space:]]'
+if test -f "$HOME/.codex/config.toml"; then
+  cp "$HOME/.codex/config.toml" "$HOME/.codex/config.toml.backup.$(date +%Y%m%d-%H%M%S)"
+fi
 ```
 
-输出中的 `multi_agent` 和 `multi_agent_v2` 应为 `true`。下面的模板仍会显式写入 `multi_agent_v2 = true`，以兼容需要手动开启的 Codex 版本。
-
-先确保文件存在，再打开：
-
-```sh
-mkdir -p "$HOME/.codex"
-touch "$HOME/.codex/config.toml"
-open -e "$HOME/.codex/config.toml"
-```
-
-把 `templates/config-kimi-provider.toml` 的内容合并到文件中。
-
-注意：
-
-- 如果已经有 `[features]`，只添加或更新 `multi_agent_v2 = true`，不要创建第二个 `[features]`。
-- 如果已经有 `[agents]`，只把对应键加进现有表，不要创建第二个 `[agents]`。
-- 如果已经有 `[model_providers.codex_kimi_bridge]`，更新现有表，不要重复粘贴。
-- 不要把 API Key 直接写进 TOML。
-
-需要合并的内容是：
+读取现有文件，把安装包 `templates/config-kimi-provider.toml` 的内容合并进去。不要整文件覆盖，也不要创建重复的 `[features]`、`[agents]` 或 provider 表。核心配置是：
 
 ```toml
-[features]
-multi_agent_v2 = true
-
 [agents]
 enabled = true
-max_concurrent_threads_per_session = 4
 
 [model_providers.codex_kimi_bridge]
-name = "Kimi Code K3 via Codex Kimi Bridge"
+name = "Kimi via Codex Kimi Bridge"
 base_url = "http://127.0.0.1:8787/v1"
 wire_api = "responses"
 stream_idle_timeout_ms = 900000
@@ -165,222 +182,79 @@ timeout_ms = 5000
 refresh_interval_ms = 0
 ```
 
-保存并关闭 TextEdit。
+Keychain 命令只把 Key 交给 Codex provider，不会把 Key 写进 TOML。
 
-## 第 5 步：安装 `kimi_frontend` 自定义子代理
-
-Codex 会自动读取 `~/.codex/agents/*.toml` 中的个人自定义代理。
-
-执行：
+## 9. 安装 `kimi_frontend` 子代理
 
 ```sh
 mkdir -p "$HOME/.codex/agents"
-cp ./templates/kimi_frontend.toml "$HOME/.codex/agents/kimi_frontend.toml"
+cp templates/kimi_frontend.toml "$HOME/.codex/agents/kimi_frontend.toml"
 ```
 
-检查文件：
+然后按第 6 节修改模型、上下文窗口和自动压缩值。完整角色模板默认只读，并会向主代理返回前端视觉、交互、响应式、可访问性和实施成本方面的可执行建议。
 
-```sh
-sed -n '1,220p' "$HOME/.codex/agents/kimi_frontend.toml"
-```
-
-这个代理的关键设置是：
-
-- `model_provider = "codex_kimi_bridge"`
-- `model = "k3"`
-- `model_context_window = 1048576`
-- `model_reasoning_effort = "xhigh"`，桥接器会映射为 Kimi 的 `max`
-- `sandbox_mode = "read-only"`
-
-模板中的 `developer_instructions` 是一套可以直接使用的前端体验与视觉审查角色示例，定义了检查重点、输出结构和只读边界。完整内容与自定义说明见 [中文 README 的角色指令示例](../README.md#kimi_frontend-角色指令示例)。
-
-随附模板使用的是已经实测的 Allegretto + K3 1M 配置。如果你的会员等级不同，请从 [中文 README 的会员模型表](../README.md#按会员等级选择-kimi-code-模型) 选择有权限的模型和上下文窗口，修改 `kimi_frontend.toml`，并在启动或诊断桥接时使用相同的模型 ID。
-
-## 第 6 步：启动桥接
-
-在一个独立终端运行：
-
-```sh
-codex-kimi-bridge serve
-```
-
-看到下面几类信息即表示服务已启动：
-
-```text
-codex-kimi-bridge 0.1.0 listening on http://127.0.0.1:8787
-upstream: https://api.kimi.com
-privacy: request bodies and credentials are not logged
-```
-
-保留这个终端窗口。每次重启 Mac 后都要重新启动桥接。也可以双击安装包中的 `start-installed-codex-kimi-bridge.command`。
-
-如果选择的不是默认 `k3`，请用相同的模型 ID 启动桥接，例如：
-
-```sh
-codex-kimi-bridge serve --model k3-256k
-```
-
-Codex 实际发送的模型仍由 `kimi_frontend.toml` 决定；两处保持一致，可以让健康检查和诊断信息准确显示当前模型。
-
-## 第 7 步：验证本机、Key 和真实 Kimi 请求
-
-另开一个终端。
-
-检查本机服务：
-
-```sh
-curl -s http://127.0.0.1:8787/health
-codex-kimi-bridge doctor --json
-```
-
-执行一次小型真实请求；这一步会消耗少量 Kimi 额度：
-
-```sh
-codex-kimi-bridge doctor --live --json
-```
-
-如果选择的不是 `k3`，实时诊断也要传入相同模型，例如：
-
-```sh
-codex-kimi-bridge doctor --live --json --model k3-256k
-```
-
-也可以经过本机 Responses 桥接测试：
-
-```sh
-codex-kimi-bridge request "只回复 OK"
-```
-
-## 第 8 步：重启 Codex Desktop 并测试子代理
-
-1. 完全退出 Codex Desktop，不只是关闭窗口。
-2. 保持桥接终端运行。
-3. 重新打开 Codex Desktop，新建对话。
-4. 输入：
-
-   ```text
-   请使用 kimi_frontend 子代理，只读审查当前项目的前端视觉、交互和响应式布局，等它完成后汇总结论。
-   ```
-
-5. 在 Desktop 的子代理活动区确认出现 `kimi_frontend` 工作线程。
-
-如果 Multi-agent v2 未启用，或当前 Codex 版本仍限制第三方 provider 子代理，桥接健康检查仍可能成功，但 Desktop 会拒绝调度。先确认功能状态，再判断是否属于 Codex 客户端限制；这不一定代表 API Key 或桥接损坏。
-
-## 可选：安装 Codex 管理 Skill
-
-安装包还附带 `manage-codex-kimi-bridge` Skill，可以让 Codex 帮你诊断、启动和检查桥接。它不是运行桥接所必需的。
+## 10. 安装管理 Skill（可选）
 
 ```sh
 mkdir -p "$HOME/.codex/skills"
-cp -R ./companion-skill/manage-codex-kimi-bridge \
-  "$HOME/.codex/skills/manage-codex-kimi-bridge"
+cp -R companion-skill/manage-codex-kimi-bridge "$HOME/.codex/skills/"
 ```
 
-安装后完全重启 Codex Desktop。可以这样调用：
+这个 Skill 用于以后启动、诊断、切换模型和排查 8787 端口；它不是桥接程序本身。
+
+## 11. 启动与检查
+
+Kimi Code Allegretto 默认配置可直接双击：
 
 ```text
-请使用 $manage-codex-kimi-bridge 检查并安全启动本地 Kimi 桥接。
+start-codex-kimi-bridge.command
 ```
 
-## 以后更换 API Key
-
-不需要改桥接或 TOML。再次执行：
+其他 Kimi Code 模型从终端启动，例如：
 
 ```sh
-/usr/bin/security add-generic-password \
-  -U \
-  -a "$USER" \
-  -s "codex-kimi-code-api-key" \
-  -w
+$HOME/.local/bin/codex-kimi-bridge serve --model k3-256k
 ```
 
-然后完全重启 Codex Desktop 或新建对话。桥接本身不会缓存 API Key。
+窗口显示 `implementation: rust` 即为新默认版。保持窗口打开；停止时按 `Control+C`。
 
-## 以后升级桥接
-
-1. 停止当前正在运行的桥接终端：按 `Control-C`。
-2. 验证新安装包的 SHA-256。
-3. 安装新包：
-
-   ```sh
-   npm install --global ./新的-codex-kimi-bridge.tgz
-   codex-kimi-bridge --version
-   ```
-
-4. 重新运行 `codex-kimi-bridge serve`。
-
-不要在未完成的工具调用中途重启桥接；Kimi 的 preserved reasoning 状态只保存在当前桥接进程内存中。
-
-## 故障排查
-
-### 8787 端口被占用
+另开终端执行离线／本机检查：
 
 ```sh
-lsof -nP -iTCP:8787 -sTCP:LISTEN
+curl -s http://127.0.0.1:8787/health
+$HOME/.local/bin/codex-kimi-bridge doctor --json
 ```
 
-确认 PID 后再停止对应进程：
+健康信息应包含：
+
+```json
+{"service":"codex-kimi-bridge","implementation":"rust","version":"0.2.0-alpha.1"}
+```
+
+`doctor --json` 不会联系 Kimi。只有明确愿意消耗少量额度时才运行：
 
 ```sh
-kill -INT <PID>
+$HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 ```
 
-### `codex-kimi-bridge: command not found`
+最后完全重启 Codex Desktop，在任务中要求主代理“使用 `kimi_frontend` 子代理审查这个前端”。
+
+## 12. 常见问题
+
+- **8787 已占用**：先确认占用者，不要直接结束未知进程。旧桥窗口可按 `Control+C` 停止。Rust 和 Node 版不能同时监听 8787。
+- **仍启动 0.1.0**：运行 `command -v codex-kimi-bridge`；若指向全局 npm 位置，卸载旧包，再使用 `~/.local/bin/codex-kimi-bridge`。
+- **`command not found`**：使用完整路径，或按第 4 节把 `~/.local/bin` 加入 PATH。
+- **macOS 阻止打开**：先核对 SHA-256，再右键 `.command` 选择“打开”。
+- **401／missing_api_key**：检查 Keychain 服务名和 provider 的 auth 命令，不要输出 Key 本身。
+- **模型无权限**：按会员等级同时修改子代理的三项模型配置；新建任务后重试。
+- **Rust 兼容问题**：停止 Rust 版后，按 [`node/install/INSTALL-GUIDE.zh-CN.md`](../node/install/INSTALL-GUIDE.zh-CN.md) 安装不同命令名的 Node 回退版。
+
+## 13. 卸载
+
+停止桥接后，把二进制移到废纸篓：
 
 ```sh
-npm list --global --depth=0
-npm bin --global 2>/dev/null || npm prefix --global
+mv "$HOME/.local/bin/codex-kimi-bridge" "$HOME/.Trash/codex-kimi-bridge"
 ```
 
-重新打开终端后再试。不要改用名字相似的 npm 包。
-
-### HTTP 401 或 `missing_api_key`
-
-```sh
-/usr/bin/security find-generic-password \
-  -s "codex-kimi-code-api-key" >/dev/null \
-  && echo OK
-```
-
-如果没有输出 `OK`，重新执行第 3 步。不要运行带 `-w` 的查找命令并把结果贴到聊天中，因为那会显示 Key。
-
-### `/health` 无法连接
-
-桥接没有运行，或 8787 被别的进程占用。回到第 6 步启动服务。
-
-### Codex 看不到 `kimi_frontend`
-
-确认：
-
-```sh
-test -f "$HOME/.codex/agents/kimi_frontend.toml" && echo "agent file: OK"
-rg -n '^(name|description|developer_instructions|model_provider|model)\s*=' \
-  "$HOME/.codex/agents/kimi_frontend.toml"
-```
-
-自定义代理文件必须包含 `name`、`description` 和 `developer_instructions`。修复后完全重启 Codex Desktop。
-
-### Kimi 返回模型权限或额度错误
-
-确认使用 Kimi Code API Key，而不是其他平台的 Key；确认会员允许调用 `kimi_frontend.toml` 中配置的模型，并检查 Kimi Code 控制台中的额度和 Key 状态。
-
-## 安全检查清单
-
-- [ ] 安装包里没有 API Key
-- [ ] Key 只保存在 macOS Keychain
-- [ ] provider URL 是 `http://127.0.0.1:8787/v1`
-- [ ] 桥接上游是 `https://api.kimi.com`
-- [ ] Multi-agent v2 已启用，或 `codex features list` 显示其状态为 `true`
-- [ ] 没有使用 `--allow-non-loopback`
-- [ ] `kimi_frontend` 保持 `sandbox_mode = "read-only"`
-- [ ] 真实测试结束后没有把完整响应或 Key 发到公开位置
-
-## 配置更新提醒
-
-Codex 和 Kimi Code 都会更新。如果安装日期距离 2026-08-11 较久，先核对：
-
-- OpenAI Codex 配置参考：`https://learn.chatgpt.com/docs/config-file/config-reference`
-- OpenAI Codex 子代理文档：`https://learn.chatgpt.com/docs/agent-configuration/subagents`
-- Kimi Code 文档：`https://www.kimi.com/code/docs/en/`
-
-不要直接沿用未来已被官方删除或改名的实验字段；provider 的 `base_url`、`wire_api`、认证命令字段和自定义代理必填字段尤其需要复核。
+Codex provider、子代理、Skill 和 Keychain 项目是独立配置，只有确定不再使用时才分别删除。卸载 Rust 二进制不会自动删除这些内容。

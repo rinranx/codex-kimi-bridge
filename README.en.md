@@ -2,102 +2,107 @@
 
 [简体中文](README.md) | **English**
 
-An independently implemented local bridge with zero third-party runtime dependencies. It converts the OpenAI Responses requests used by Codex Desktop into OpenAI-compatible Chat Completions requests for Kimi Code.
+A local single-binary Rust bridge that converts OpenAI Responses requests from Codex Desktop into OpenAI-compatible Kimi Code or Kimi API Chat Completions requests.
 
 ```text
 Codex Desktop ── Responses API ──> 127.0.0.1:8787
                                       │
-                                      └── HTTPS ──> api.kimi.com/coding/v1/chat/completions
+                                      └── HTTPS ──> Kimi Chat Completions
 ```
 
-The runtime uses only the Node.js standard library.
+Rust is the default implementation starting with `0.2.0-alpha.1`. Users do not need Rust, Node.js, or npm. The original Node.js implementation has been renamed to `codex-kimi-bridge-node` and is preserved in [`node/`](node/) as a fallback.
 
-For a first-time installation, follow the [complete macOS installation guide](install/INSTALL-GUIDE.en.md) and use the included TOML templates. The installation package never contains an API key.
-
-## Downloads and one-click startup
+## Downloads
 
 - Project: <https://github.com/rinranx/codex-kimi-bridge>
-- Complete macOS installation kit: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.1.0.zip>
-- npm package: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-0.1.0.tgz>
+- Recommended universal macOS kit (Apple Silicon + Intel): <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
+- Apple Silicon binary: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-arm64-0.2.0-alpha.1.tar.gz>
+- Intel Mac binary: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.1.tar.gz>
 - SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/tree/main/downloads>
 
-After extracting the installation kit and completing the configuration, double-click `start-installed-codex-kimi-bridge.command` to start the local bridge. It invokes the globally installed `codex-kimi-bridge` command. The source tree also includes `start-codex-kimi-bridge.command`, which can run the development copy without a global installation.
+This is the first Rust alpha and is not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
 
-## Beginner setup: let Codex install it
+## Simplest installation
 
-If you would rather not merge TOML or run every command manually, open [Install with Codex](INSTALL-WITH-CODEX.en.md) and paste its complete prompt into Codex Desktop. Codex will read the project documentation first, then configure the installation for your key type and membership tier.
+If you are not comfortable with the terminal, use [Install with Codex](INSTALL-WITH-CODEX.en.md). It contains a safe prompt you can paste directly into Codex Desktop.
 
-This is a secure assisted installation, not a fully unattended one. You still approve narrowly scoped writes and personally type the API key into the macOS Keychain prompt. Never send the key through chat.
+For manual setup:
+
+1. Download and extract the complete installation kit.
+2. Double-click `install-codex-kimi-bridge.command` to install the universal Rust binary at `~/.local/bin/codex-kimi-bridge`.
+3. Follow the [complete macOS guide](install/INSTALL-GUIDE.en.md) to store the key, merge the Codex configuration, and install the subagent.
+4. Double-click `start-codex-kimi-bridge.command` to start the local bridge.
+
+The installer does not modify `~/.codex/config.toml`, Keychain, or shell profiles, and it never uninstalls an old command automatically.
+
+## Migrating from Node 0.1.0
+
+The old npm package and the Rust default both use the command name `codex-kimi-bridge`. Stop the old bridge and remove the old global npm command before installing Rust:
+
+```sh
+npm uninstall --global codex-kimi-bridge
+```
+
+Then install the Rust binary. The provider URL, Keychain service, and `kimi_frontend.toml` remain unchanged. To fall back temporarily:
+
+```sh
+cd node
+npm install --global .
+codex-kimi-bridge-node serve
+```
+
+The Rust and Node fallback implementations cannot listen on port 8787 simultaneously.
 
 ## Implemented features
 
-- Responses text, image, and video input conversion
+- Responses text, image, and video conversion
 - Non-streaming and SSE streaming output
 - Function tools and Responses custom tools
-- Preservation of Kimi `reasoning_content` across multi-turn tool calls
+- In-memory preservation of Kimi `reasoning_content` across tool calls
 - `low` / `high` / `max` reasoning-effort mapping
-- JSON Object and JSON Schema output formats
+- JSON Object and JSON Schema output
 - Kimi Code Plan `prompt_cache_key`
-- Upstream API error passthrough with a stable local error format
-- Loopback-only binding by default and HTTPS-only upstreams by default
+- Upstream error passthrough with stable local errors
+- Loopback-only binding and HTTPS-only upstream defaults
+- Rejection of upstream redirects and credential-bearing upstream URLs
 - No logging of request bodies, API keys, or reasoning content
+- A single macOS binary with no external runtime
 
-## Requirements
+## Enable Codex Multi-agent v2
 
-- macOS, Linux, or Windows
-- Node.js 20 or later; the current development and test environment uses Node.js 26
-- A Kimi Code API key. Multiple membership tiers are supported; select a model available to your plan using the table below.
-
-No `npm install` is required inside the source directory. The project has zero runtime dependencies.
-
-## Confirm that Codex Multi-agent v2 is enabled
-
-This project uses Codex multi-agent support to schedule `kimi_frontend` as a custom subagent. Before continuing, confirm that Multi-agent v2 is enabled:
+The project schedules `kimi_frontend` as a custom Codex subagent:
 
 1. Open Codex Desktop settings.
-2. Find **Multi-agent v2** under “Experimental Features” or “Features.”
-3. If the option is present but disabled, enable it.
-4. Quit Codex Desktop completely, then reopen it.
+2. Enable **Multi-agent v2** under Experimental Features or Features.
+3. Quit Codex Desktop completely, then reopen it.
 
-Newer Codex versions may enable Multi-agent v2 by default and mark it as stable. If no toggle is shown but Codex can already display and schedule subagents, no additional change is required.
+Newer versions may enable it by default. If no toggle is visible but Codex can display and schedule subagents, no change is required.
 
-You can also check the effective state in a terminal:
+You can also inspect the state:
 
 ```sh
 codex features list | grep -E '^multi_agent(_v2)?[[:space:]]'
 ```
 
-Both `multi_agent` and `multi_agent_v2` should show `true`. With an older Codex version or a manually managed configuration, add the following to `~/.codex/config.toml`:
+When manual configuration is required, add the key to the existing table:
 
 ```toml
 [features]
 multi_agent_v2 = true
 ```
 
-If `[features]` already exists, add only `multi_agent_v2 = true`; do not create a second `[features]` table. The `[agents] enabled = true` setting shown later is also required. The two settings serve different purposes.
+Do not create a duplicate `[features]` table.
 
-## Optional: install as a global command
+## Codex provider configuration
 
-Run the following from the project directory:
-
-```sh
-npm install --global .
-codex-kimi-bridge doctor --json
-codex-kimi-bridge serve
-```
-
-You can then use `codex-kimi-bridge` from any directory. If you prefer not to install it globally, continue using the `.command` launcher in the source directory.
-
-## Codex configuration
-
-Use the following Codex provider structure:
+Safely merge this into the user-level `~/.codex/config.toml`. Do not overwrite unrelated settings or put the key in TOML:
 
 ```toml
 [agents]
 enabled = true
 
 [model_providers.codex_kimi_bridge]
-name = "Kimi Code K3 via Codex Kimi Bridge"
+name = "Kimi via Codex Kimi Bridge"
 base_url = "http://127.0.0.1:8787/v1"
 wire_api = "responses"
 stream_idle_timeout_ms = 900000
@@ -116,24 +121,23 @@ timeout_ms = 5000
 refresh_interval_ms = 0
 ```
 
-Subagent configuration—the following is the tested example for an Allegretto membership using K3 with a 1M-token context window:
+## Complete `kimi_frontend` example
+
+This is the complete Allegretto + K3 1M template. The source file is [`install/templates/kimi_frontend.toml`](install/templates/kimi_frontend.toml):
 
 ```toml
+name = "kimi_frontend"
+description = "Use Kimi K3 to review and improve frontend visuals, interactions, responsive layouts, and implementation plans."
+
 model_provider = "codex_kimi_bridge"
 model = "k3"
 model_context_window = 1048576
 model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
+model_supports_reasoning_summaries = false
+
 sandbox_mode = "read-only"
-```
 
-The bridge maps `xhigh` to Kimi K3 `max`.
-
-### `kimi_frontend` role-instructions example
-
-The model settings determine which Kimi model the subagent calls. `developer_instructions` defines its role, review priorities, and output format. The bundled `install/templates/kimi_frontend.toml` includes the following ready-to-use frontend-review example:
-
-```toml
 developer_instructions = """
 You are a senior design engineer focused on frontend experience and visual quality.
 
@@ -149,7 +153,7 @@ Output structure:
 1. Issues that must be fixed
 2. Major issues affecting the experience
 3. Specific recommended improvements
-4. An implementation checklist that can be handed to the primary agent
+4. An implementation checklist for the primary agent
 
 Remain read-only by default and do not modify files directly.
 Be specific; avoid abstract recommendations such as only saying “more modern” or “more polished.”
@@ -157,91 +161,45 @@ Return a concise, actionable summary to the primary agent when finished.
 """
 ```
 
-This is only the default role example. You can adapt it for code review, product-experience analysis, or another specialty. If Kimi should provide advice only, keep both `sandbox_mode = "read-only"` and the read-only instruction.
+The bridge maps `xhigh` to Kimi K3 `max`. You may customize the role, but keep `sandbox_mode = "read-only"` and the read-only instruction when Kimi should only advise.
 
-## Choose a Kimi Code model for your membership tier
+## Choose a Kimi Code model by membership tier
 
-The `k3` 1M configuration above is not a requirement for installing the bridge. It is the Allegretto configuration that has been tested end to end by this project. All Kimi Code membership tiers use the same upstream endpoint and the same type of Kimi Code API key:
+All Kimi Code memberships use the same key type and upstream:
 
 ```text
 https://api.kimi.com/coding/v1/chat/completions
 ```
 
-The differences are the models and context windows available to each membership tier:
+| Kimi membership | Recommended model | Context | Auto compact | Best for |
+| --- | --- | ---: | ---: | --- |
+| Andante / all members | `kimi-for-coding` | `262144` | `230000` | Routine development |
+| Moderato | `k3-256k` | `262144` | `230000` | Recommended; lower quota usage |
+| Moderato | `k3` | `262144` | `230000` | K3 without 1M access |
+| Allegretto and above | `k3` | `1048576` | `900000` | Large repositories and long context |
+| Allegretto and above | `kimi-for-coding-highspeed` | `262144` | `230000` | Faster output |
 
-| Kimi membership tier | Recommended model ID | Context window | Best for |
-| --- | --- | ---: | --- |
-| Andante / all Kimi Code members | `kimi-for-coding` | `262144` | Routine development and code completion |
-| Moderato | `k3-256k` | `262144` | Recommended; K3-equivalent results within 256K with lower quota usage |
-| Moderato | `k3` | `262144` | K3 without 1M-context access |
-| Allegretto and above | `k3` | `1048576` | Large repositories and long-context tasks |
-| Allegretto and above | `kimi-for-coding-highspeed` | `262144` | Faster model output |
+Refer to the [official Kimi Code model configuration](https://www.kimi.com/code/docs/en/kimi-code/models.html) for current permissions.
 
-Refer to the [official Kimi Code model configuration](https://www.kimi.com/code/docs/en/kimi-code/models.html) for current model permissions and context limits. The official documentation states that `k3-256k` produces the same results as `k3` within a 256K context, while the 1M-context `k3` consumes roughly twice as much quota.
-
-After selecting a model, change the corresponding lines in `~/.codex/agents/kimi_frontend.toml`.
-
-### Andante / general membership configuration
-
-```toml
-model = "kimi-for-coding"
-model_context_window = 262144
-model_auto_compact_token_limit = 230000
-model_reasoning_effort = "high"
-```
-
-```sh
-codex-kimi-bridge serve --model kimi-for-coding
-```
-
-### Recommended Moderato configuration
-
-```toml
-model = "k3-256k"
-model_context_window = 262144
-model_auto_compact_token_limit = 230000
-model_reasoning_effort = "high"
-```
+When switching models, update `~/.codex/agents/kimi_frontend.toml` and start the bridge with the same model:
 
 ```sh
 codex-kimi-bridge serve --model k3-256k
 ```
 
-### Allegretto and above: K3 1M
-
-```toml
-model = "k3"
-model_context_window = 1048576
-model_auto_compact_token_limit = 900000
-model_reasoning_effort = "xhigh"
-```
+Restart the bridge and reopen Codex Desktop or create a new task. A live diagnostic must use the same model:
 
 ```sh
-codex-kimi-bridge serve --model k3
+codex-kimi-bridge doctor --live --json --model k3-256k
 ```
 
-### Allegretto and above: K2.7 HighSpeed
+That command contacts Kimi and consumes a small amount of quota.
 
-```toml
-model = "kimi-for-coding-highspeed"
-model_context_window = 262144
-model_auto_compact_token_limit = 230000
-model_reasoning_effort = "high"
-```
+## Kimi API Open Platform key (advanced)
 
-```sh
-codex-kimi-bridge serve --model kimi-for-coding-highspeed
-```
+Kimi Code membership keys and Kimi API Open Platform keys are separate products. Their keys, model IDs, and endpoints are not interchangeable.
 
-`serve --model` sets the bridge’s default model and the model displayed by its health endpoint. The model actually sent by the Codex subagent comes from `model` in `kimi_frontend.toml`. Keep both values synchronized when switching models. Then restart the bridge and either restart Codex Desktop or open a new task to avoid reusing the previous session’s model cache. When running a live diagnostic, also pass the same model to `doctor --live --model <model-id>`.
-
-You can switch among the models permitted by your current Kimi Code membership using the same Kimi Code key. Switching models does not require a new key.
-
-## No Kimi Code membership: pay-as-you-go API (advanced)
-
-Kimi Code membership keys and Kimi API Open Platform keys belong to separate products. Their keys, model IDs, and endpoints are not interchangeable. See the [official Kimi API troubleshooting guide](https://www.kimi.com/help/kimi-api/api-troubleshooting).
-
-For an international Open Platform key:
+International Open Platform:
 
 ```sh
 codex-kimi-bridge serve \
@@ -249,7 +207,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-For a mainland China Open Platform key:
+Mainland China Open Platform:
 
 ```sh
 codex-kimi-bridge serve \
@@ -257,16 +215,11 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-Use the following `kimi_frontend.toml` settings:
+Open Platform remains an advanced route in `0.2.0-alpha.1`. Release validation primarily uses a Kimi Code membership key.
 
-```toml
-model = "kimi-k3"
-model_context_window = 1048576
-model_auto_compact_token_limit = 900000
-model_reasoning_effort = "xhigh"
-```
+## Store or replace the API key
 
-Store the Open Platform key in the same local Keychain item. `codex-kimi-code-api-key` is only the local item name; it does not determine the key type:
+Store the key only in macOS Keychain:
 
 ```sh
 /usr/bin/security add-generic-password \
@@ -276,74 +229,68 @@ Store the Open Platform key in the same local Keychain item. `codex-kimi-code-ap
   -w
 ```
 
-> [!IMPORTANT]
-> The complete test and release-validation path for `codex-kimi-bridge 0.1.0` uses a Kimi Code membership key. Kimi Open Platform provides a compatible Chat Completions interface, and the bridge supports custom upstreams and models, but this route should be treated as an advanced and experimental configuration in version 0.1.0. Before relying on it, run a small test with the same key, regional endpoint, and model you intend to use.
+Keep `-w` last and type the key directly into the terminal prompt. Never send it through chat, screenshots, or configuration files. Run the same command to replace the key, then restart Codex Desktop or create a new task.
 
-## Replace the API key
-
-The bridge does not store the key. It only forwards the Bearer token supplied with each Codex request. Update Keychain without changing the source code:
+## CLI
 
 ```sh
-/usr/bin/security add-generic-password \
-  -U \
-  -a "$USER" \
-  -s "codex-kimi-code-api-key" \
-  -w
-```
-
-Keep `-w` as the final argument. The terminal will securely prompt for the new key, so the key is not written to shell history. Restart Codex Desktop or start a new task after the update.
-
-## Commands
-
-```sh
+codex-kimi-bridge --version
 codex-kimi-bridge serve
 codex-kimi-bridge doctor --json
-codex-kimi-bridge doctor --live --json
-codex-kimi-bridge translate-request --file fixtures/responses-request.json
+codex-kimi-bridge translate-request --file compat/responses-request.json
 codex-kimi-bridge request "Reply with OK only."
-codex-kimi-bridge --help
 ```
 
-`translate-request` is fully offline and can be used to inspect the converted request. `request` sends a request through the running local bridge and reads the test key from `KIMI_CODE_API_KEY` or the macOS Keychain.
+- `translate-request` is fully offline.
+- `doctor --json` does not contact Kimi by default.
+- `doctor --live` and `request` read the local key and make real requests.
 
 ## Security design
 
-- Binds to `127.0.0.1` by default; binding to a non-loopback interface requires the explicit `--allow-non-loopback` flag
-- Allows HTTPS upstreams by default; plain HTTP is accepted only for an explicitly configured loopback test server
-- Refuses upstream redirects to reduce the risk of credential forwarding
-- Logs only sanitized status and error codes
-- Keeps Kimi reasoning state in memory only, capped at 512 entries or 64 MiB and evicted after two hours; all state is lost when the process exits
+- Default bind is `127.0.0.1`; external binding requires `--allow-non-loopback`
+- HTTPS upstreams are required by default
+- Plain HTTP is limited to explicit loopback test servers
+- Upstream URLs cannot contain embedded credentials
+- Redirects are rejected to prevent credential forwarding
+- Request bodies, Authorization, keys, and reasoning are never logged
+- The reasoning cache stays in memory, is limited to 512 entries or 64 MiB, and expires after two hours
+- The `request` command sends credentials only to loopback URLs
 
-See [SECURITY.md](SECURITY.md) for details.
+See [SECURITY.md](SECURITY.md).
 
-## Verification
+## Development and validation
+
+Rust default:
 
 ```sh
+cd rust
+cargo fmt --check
+cargo check --all-targets
+cargo test --all-targets
+cargo build --release
+```
+
+Node fallback:
+
+```sh
+cd node
 npm run check
 npm test
 npm run smoke
 ```
 
-Tests cover request conversion, SSE, function/custom tools, authentication, privacy logging, and a two-turn tool-call flow. The development sandbox cannot bind a local port, so automated end-to-end tests directly invoke the same request handler used by the HTTP server and supply a simulated Kimi response. On a normal machine, use `/health` and `doctor --live` for additional local-port and upstream checks.
+The shared compatibility fixture is [`compat/responses-request.json`](compat/responses-request.json). Release validation compares offline Node and Rust translations.
 
-## Known limitations
+## Known boundaries
 
-- Safely converts only Responses `function` and `custom` tools. OpenAI-hosted tools such as `web_search` and `file_search` produce explicit errors instead of being silently removed.
-- Does not support `previous_response_id`; callers must send the complete conversation items, as Codex does.
-- Does not forward `parallel_tool_calls` because the Kimi Chat API documentation does not declare that request field.
-- Multi-turn tool-call reasoning state is process-local. If the bridge restarts during an unfinished tool chain, start a new Kimi subagent task.
-- Whether Codex Desktop schedules a third-party provider as a Multi-agent v2 subagent is controlled by Codex itself. The bridge handles protocol compatibility only and cannot bypass Desktop scheduling restrictions.
+- Only Responses `function` and `custom` tools are translated safely; hosted tools fail explicitly
+- `previous_response_id` is unsupported; callers must send full conversation items
+- `parallel_tool_calls` is not forwarded
+- Reasoning state exists only in the current process; start a new subagent task after a mid-chain restart
+- Third-party-provider subagent scheduling remains controlled by Codex Desktop
+- The Rust alpha binary is not yet Apple-notarized
 
-## Optional companion skill
+## License
 
-The project includes the [`manage-codex-kimi-bridge`](companion-skill/manage-codex-kimi-bridge/SKILL.md) skill. After installing the global command, copy that skill directory to `~/.codex/skills/` to let Codex diagnose and start the bridge. The skill is not required for the bridge to run.
+[MIT](LICENSE)
 
-## Uninstall or roll back
-
-Press `Control-C` in the bridge terminal to stop it. If you installed the global command, run:
-
-```sh
-npm uninstall --global codex-kimi-bridge
-```
-
-This does not delete the Keychain item or modify the Codex configuration.

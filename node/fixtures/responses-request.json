@@ -1,0 +1,19 @@
+{
+  "model": "k3",
+  "instructions": "You are a read-only frontend reviewer.",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Review the current layout."
+        }
+      ]
+    }
+  ],
+  "reasoning": {
+    "effort": "xhigh"
+  },
+  "stream": true
+}

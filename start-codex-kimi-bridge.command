@@ -2,17 +2,12 @@
 
 set -eu
 
-BRIDGE_DIR="$(cd "$(dirname "$0")" && pwd)"
+BRIDGE_BIN="$HOME/.local/bin/codex-kimi-bridge"
 
-if command -v node >/dev/null 2>&1; then
-  NODE_BIN="$(command -v node)"
-elif [[ -x /opt/homebrew/bin/node ]]; then
-  NODE_BIN="/opt/homebrew/bin/node"
-elif [[ -x /usr/local/bin/node ]]; then
-  NODE_BIN="/usr/local/bin/node"
-else
-  print -u2 "Node.js 20+ was not found. Install Node.js, then run this launcher again."
+if [[ ! -x "$BRIDGE_BIN" ]]; then
+  print -u2 "没有在 ~/.local/bin 找到 Rust 版 codex-kimi-bridge。"
+  print -u2 "请下载完整安装包并运行 install-codex-kimi-bridge.command。"
   exit 1
 fi
 
-exec "$NODE_BIN" "$BRIDGE_DIR/bin/codex-kimi-bridge.mjs" serve
+exec "$BRIDGE_BIN" serve "$@"

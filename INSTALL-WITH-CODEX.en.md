@@ -1,99 +1,56 @@
-# Install with Codex
+# Install by Giving the Repository to Codex
 
 [简体中文](INSTALL-WITH-CODEX.md) | **English**
 
-If you are not comfortable with the terminal or TOML, you can give this repository to Codex and let it perform most of the installation and configuration by following the project documentation.
+If terminal commands and TOML are unfamiliar, give the project URL to Codex Desktop. It can install the default Rust single binary and configure the provider, subagent, and management skill.
 
-This is an **assisted installation** that is close to one click, not a fully unattended installer. Two actions remain yours for security:
+This is close to one-click setup, but you should still review scoped writes to `~/.local/bin` and `~/.codex`, enter the API key only in a macOS Keychain terminal prompt, and decide whether a quota-consuming live test may run.
 
-1. Approve narrowly scoped writes to locations such as `~/.codex`.
-2. Enter the API key directly into the secure macOS Keychain prompt. Never send the key through chat.
+Users do not need Rust, Node.js, or npm. The separately named `codex-kimi-bridge-node` under `node/` is only a fallback after a confirmed Rust compatibility problem.
 
-## Before you start
+## How to use it
 
-- A Mac with Codex Desktop installed and signed in.
-- Node.js 20 or later. If it is missing, Codex can check and guide you through installing it.
-- Either a Kimi Code membership API key or a pay-as-you-go Kimi API Open Platform key.
-- For Kimi Code, it helps to know whether your membership is Andante, Moderato, Allegretto, or higher.
-
-## The simplest setup
-
-1. Create a new task in Codex Desktop.
-2. Copy and send the complete prompt below.
-3. If you did not fill in the key type or membership tier, answer Codex's question about that item only.
-4. Review and approve installation actions with a clear, limited scope.
-5. When Codex is ready to store the API key, type it into the terminal prompt it opens or identifies. Do not paste it into chat.
-6. Codex should run a real Kimi request, which may consume quota, only after you explicitly approve it.
-
-You may fill in this line and send it with the prompt:
+Create a Codex Desktop task and fill in this line:
 
 ```text
-My key type / membership tier: __________________
+My key type / membership: Kimi Code Andante / Moderato / Allegretto or above / Kimi API Open Platform (choose one)
 ```
 
-## Prompt to copy into Codex
+Then paste the complete prompt below:
 
 ```text
-Install and configure Codex Kimi Bridge from this official repository:
+Install and configure the default Rust Codex Kimi Bridge from:
 
 https://github.com/rinranx/codex-kimi-bridge
 
-Follow these requirements strictly:
+Follow these requirements exactly:
 
-1. Read README.en.md, INSTALL-WITH-CODEX.en.md, and install/INSTALL-GUIDE.en.md before installing anything.
-2. Use only codex-kimi-bridge supplied by this repository. Do not substitute a similarly named third-party package from npm.
-3. Check Node.js, Codex Desktop, and Multi-agent v2 first. Do not use sudo npm install, and do not change permissions for my entire home directory or npm cache.
-4. If I have not provided my key type and membership tier, first ask whether I use:
-   - Kimi Code Andante
-   - Kimi Code Moderato
-   - Kimi Code Allegretto or higher
-   - A pay-as-you-go Kimi API Open Platform key
-5. Select the correct model, upstream endpoint, context window, and automatic compaction value for my tier. Do not assume that everyone has Allegretto access. Kimi Code and Open Platform keys, models, and endpoints are not interchangeable.
-6. Never ask me to paste an API key into chat. Use a secure macOS Keychain input command and have me type the key directly into its terminal prompt.
-7. Read and back up ~/.codex/config.toml before changing it. Merge the [features], [agents], and provider settings without overwriting unrelated configuration or creating duplicate TOML tables.
-8. Install the kimi_frontend subagent and the bundled manage-codex-kimi-bridge management skill. Keep sandbox_mode = "read-only".
-9. Bind the bridge only to 127.0.0.1 and require HTTPS for the upstream. Do not enable --allow-non-loopback or --allow-insecure-upstream.
-10. Run checks that do not consume Kimi quota first. Ask for my explicit approval before any real Kimi request.
-11. When finished, report:
-    - Which files were installed
-    - The selected model and upstream endpoint
-    - Whether the bridge is running
-    - How to start it next time
-    - Whether any real Kimi request was made
-
-Never display, log, or repeat my API key.
+1. Read README.en.md, INSTALL-WITH-CODEX.en.md, install/INSTALL-GUIDE.en.md, SECURITY.md, and the checksum files under downloads/ before installing.
+2. Install the default Rust single-binary codex-kimi-bridge 0.2.0-alpha.1. Do not install similarly named npm packages or treat the node/ fallback as the default. A new installation requires no Rust, Node.js, or npm.
+3. Download only the macOS kit under this repository's downloads/, verify SHA-256, and install it at ~/.local/bin/codex-kimi-bridge without sudo.
+4. Before installation, inspect command -v codex-kimi-bridge and port 8787 without changing state. If an old npm 0.1.0 command or unknown listener exists, report its exact path/process and ask before uninstalling, overwriting, or stopping anything. After approval, the old official npm package may be removed with npm uninstall --global codex-kimi-bridge.
+5. Ask for my key type and membership if I did not provide them. Use the README table to select the correct model, upstream, context window, and auto-compact limit. Do not assume Allegretto 1M access. Kimi Code membership and Kimi API Open Platform keys, models, and endpoints are not interchangeable.
+6. Never ask me to paste the API key into chat. Use the macOS Keychain command and let me enter it only at the secure terminal prompt. Keep the service name codex-kimi-code-api-key; never display, log, or repeat the secret.
+7. Check Codex Multi-agent v2. Prefer enabling it in Desktop Experimental Features; only merge multi_agent_v2 = true when this Codex version needs it, and never create a duplicate [features] table.
+8. Read ~/.codex/config.toml and make a timestamped backup before editing. Merge only required [agents] and model_providers.codex_kimi_bridge keys; preserve unrelated settings, avoid duplicate TOML tables, and never place the key in TOML.
+9. Install ~/.codex/agents/kimi_frontend.toml from the repository template. Adjust model, model_context_window, and model_auto_compact_token_limit for my access, and keep sandbox_mode = "read-only".
+10. Install companion-skill/manage-codex-kimi-bridge under ~/.codex/skills/. Keep the bridge on 127.0.0.1 and the upstream on HTTPS; never enable --allow-non-loopback or --allow-insecure-upstream.
+11. On startup, require output containing implementation: rust. First run version, checksum, health, doctor --json, and offline translate-request checks that do not contact Kimi.
+12. doctor --live and request make real Kimi calls and consume quota. Ask for my separate explicit approval immediately before either command. If I do not approve, skip them and state that no live call was made.
+13. Suggest node/ only after confirming a Rust compatibility problem. Its command must be codex-kimi-bridge-node, and it cannot listen on 8787 at the same time as Rust.
+14. At completion report: downloaded file and SHA-256, installed path and version, key type, model, upstream, configuration files changed and backed up, Multi-agent v2 status, whether the bridge is running, how to start it next time, and whether any real Kimi request was sent.
 ```
 
-## What Codex should do for you
+## Expected result
 
-Within the scope you approve, Codex should:
+- `~/.local/bin/codex-kimi-bridge --version` prints `0.2.0-alpha.1`
+- `/health` identifies `implementation: rust`
+- The API key exists only in Keychain
+- Existing Codex settings remain intact with no duplicate TOML tables
+- `kimi_frontend` matches the user's membership or platform access
+- Multi-agent v2 can schedule the custom subagent
+- No real Kimi request was sent without approval
 
-- Read the project documentation and verify downloads and SHA-256 checksums.
-- Check Node.js, Codex Desktop, Multi-agent v2, and your existing Codex configuration.
-- Back up and safely merge `~/.codex/config.toml` without removing unrelated settings.
-- Install the bridge command, the `kimi_frontend` subagent, and the management skill.
-- Match the model, upstream endpoint, and context settings to your key type and membership tier.
-- Run syntax, version, and health checks that do not call Kimi first.
-- Clearly report every change and whether it made a real Kimi request.
+If Codex cannot read GitHub, manually download the [complete macOS kit](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip), provide the extracted folder, and change the prompt's first line to “Install from the local installation-kit folder I provided.”
 
-Codex should not:
-
-- Ask you to send an API key through chat or store it in a plain configuration file.
-- Use a similarly named package that did not come from this repository.
-- Run `sudo npm install` or change permissions across your home directory to fix npm.
-- Make a real Kimi request without confirmation.
-- Expose the local service on `0.0.0.0` or disable the HTTPS requirement for the upstream.
-
-## If Codex cannot read the repository directly
-
-Download the [complete macOS installation kit](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.1.0.zip), extract it, give the folder to Codex, and send the same prompt. Replace its first sentence with:
-
-```text
-Install and configure Codex Kimi Bridge from the local installation-kit folder I provided.
-```
-
-If Codex cannot write to `~/.codex`, approve only the specific files listed in the installation guide. You do not need to grant access to your entire home directory.
-
-The bundled `manage-codex-kimi-bridge` skill is for starting, stopping, diagnosing, and switching models after setup. It is not the first-time installer itself.
-
-For every manual step, read the [complete macOS installation guide](install/INSTALL-GUIDE.en.md). See the [English README](README.en.md#choose-a-kimi-code-model-for-your-membership-tier) for membership-tier and model details.
+See the [complete installation guide](install/INSTALL-GUIDE.en.md) for every manual step.

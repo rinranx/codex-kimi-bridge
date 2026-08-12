@@ -2,5 +2,6 @@
 node_modules/
 coverage/
 npm-debug.log*
-*.tgz
-*.zip
+rust/target/
+target/
+*.tmp

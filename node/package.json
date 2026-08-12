@@ -1,0 +1,38 @@
+{
+  "name": "codex-kimi-bridge-node",
+  "version": "0.1.0",
+  "description": "The maintained Node.js fallback implementation of Codex Kimi Bridge.",
+  "type": "module",
+  "bin": {
+    "codex-kimi-bridge-node": "./bin/codex-kimi-bridge-node.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "fixtures/",
+    "test/",
+    "install/",
+    "README.md",
+    "README.en.md",
+    "PROVENANCE.md",
+    "SECURITY.md",
+    "LICENSE",
+    "start-codex-kimi-bridge-node.command"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/codex-kimi-bridge-node.mjs && node --check src/cli.mjs && node --check src/server.mjs && node --check src/protocol.mjs && node --check src/reasoning-store.mjs && node --check src/sse.mjs",
+    "smoke": "node bin/codex-kimi-bridge-node.mjs --help"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "kimi",
+    "responses-api",
+    "bridge",
+    "node-fallback"
+  ]
+}

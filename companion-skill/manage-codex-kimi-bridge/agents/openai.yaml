@@ -1,4 +1,4 @@
 interface:
-  display_name: "Codex Kimi Bridge"
-  short_description: "检查、启动、诊断并安全维护本地 Codex Kimi 桥接"
-  default_prompt: "Use $manage-codex-kimi-bridge to diagnose and safely start my local Kimi bridge."
+  display_name: "Codex Kimi Bridge (Rust)"
+  short_description: "检查、启动、诊断并安全维护默认 Rust 桥接"
+  default_prompt: "Use $manage-codex-kimi-bridge to diagnose and safely start my local Rust Kimi bridge."
