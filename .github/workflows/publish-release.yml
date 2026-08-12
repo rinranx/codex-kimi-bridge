@@ -174,7 +174,7 @@ jobs:
               exit 1
             fi
             existing_id="$(jq -r '.id' <<< "$existing_json")"
-            existing_assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/$existing_id/assets?per_page=100")"
+            existing_assets="$(jq -c '.assets // []' <<< "$existing_json")"
             [[ "$(jq 'length' <<< "$existing_assets")" == "6" ]]
             [[ "$(jq '[.[].state == "uploaded"] | all' <<< "$existing_assets")" == "true" ]]
             gh release delete "$tag" --yes
@@ -196,12 +196,22 @@ jobs:
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
-          release_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
+          release_json=""
+          for attempt in {1..30}; do
+            release_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
+            if [[ -n "$release_json" ]] \
+              && [[ "$(jq -r '.draft' <<< "$release_json")" == "true" ]] \
+              && [[ "$(jq -r '.prerelease' <<< "$release_json")" == "true" ]] \
+              && [[ "$(jq '.assets | length' <<< "$release_json")" == "6" ]] \
+              && [[ "$(jq '[.assets[] | (.state == "uploaded" and (((.digest // "") | startswith("sha256:"))))] | all' <<< "$release_json")" == "true" ]]; then
+              break
+            fi
+            sleep 2
+          done
           [[ -n "$release_json" ]]
           [[ "$(jq -r '.draft' <<< "$release_json")" == "true" ]]
           [[ "$(jq -r '.prerelease' <<< "$release_json")" == "true" ]]
-          release_id="$(jq -r '.id' <<< "$release_json")"
-          assets_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100")"
+          assets_json="$(jq -c '.assets // []' <<< "$release_json")"
 
           local_count="$(find "$RUNNER_TEMP/release-assets" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
           remote_count="$(jq 'length' <<< "$assets_json")"
