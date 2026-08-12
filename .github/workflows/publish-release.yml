@@ -62,7 +62,7 @@ jobs:
           version="$(jq -er '.version' "$manifest")"
           tag="$(jq -er '.tag' "$manifest")"
           title="$(jq -er '.title' "$manifest")"
-          prerelease="$(jq -er '.prerelease' "$manifest")"
+          prerelease="$(jq -r '.prerelease' "$manifest")"
           target_commit="$(jq -r '.target_commit // empty' "$manifest")"
           retry_failed_draft="$(jq -r '.retry_failed_draft // false' "$manifest")"
           notes="${manifest%.json}.md"
@@ -72,6 +72,7 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           [[ "$tag" == "v$version" ]]
           [[ "$manifest" == "release-manifests/$tag.json" ]]
+          [[ "$(jq -r '.prerelease | type' "$manifest")" == "boolean" ]]
           [[ "$prerelease" == "true" || "$prerelease" == "false" ]]
           [[ "$target_commit" =~ ^[0-9a-f]{40}$ ]]
           [[ "$retry_failed_draft" == "true" || "$retry_failed_draft" == "false" ]]
