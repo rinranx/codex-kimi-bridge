@@ -8,7 +8,7 @@ This directory preserves the original Node.js implementation of `codex-kimi-brid
 
 - npm package: `codex-kimi-bridge-node`
 - Command: `codex-kimi-bridge-node`
-- Version: `0.1.0`
+- Version: `0.2.0`
 - Default address remains `127.0.0.1:8787`
 - The Keychain service remains `codex-kimi-code-api-key`
 
@@ -38,14 +38,14 @@ Installing the fallback does not modify `~/.codex/config.toml`. Because the loca
 You can also install the packaged fallback from the repository root:
 
 ```sh
-npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-node-0.1.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-node-0.2.0.tgz
 ```
 
 ## Features
 
 - Responses text, image, and video conversion
 - Non-streaming and SSE streaming output
-- Function and custom tools
+- Function and custom tools at the top level and inside `namespace`
 - Preservation of Kimi `reasoning_content` for multi-step tool calls
 - JSON Object and JSON Schema output
 - Loopback-only defaults, secure upstream rules, and redirect rejection

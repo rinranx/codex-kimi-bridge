@@ -15,13 +15,13 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 ## 下载
 
 - 项目主页：<https://github.com/rinranx/codex-kimi-bridge>
-- 当前版本：[`v0.2.0-alpha.2`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.2.0-alpha.2)
-- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
-- Apple Silicon 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-arm64-0.2.0-alpha.2.tar.gz>
-- Intel Mac 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.2.tar.gz>
-- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/SHA256SUMS.txt>
+- 当前版本：[`v0.3.0`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.3.0)
+- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-install-kit-0.3.0.zip>
+- Apple Silicon 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-arm64-0.3.0.tar.gz>
+- Intel Mac 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-x86_64-0.3.0.tar.gz>
+- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/SHA256SUMS.txt>
 
-构建产物只发布到带版本号的 GitHub Release，不再从 `main/downloads` 覆盖同名文件。当前仍为 alpha，尚未做 Apple 公证。首次打开 `.command` 时，macOS 可能要求右键选择“打开”。请先核对 SHA-256。
+构建产物只发布到带版本号的 GitHub Release，不再从 `main/downloads` 覆盖同名文件。当前 macOS 二进制尚未做 Apple 公证。首次打开 `.command` 时，macOS 可能要求右键选择“打开”。请先核对 SHA-256。
 
 ## 最简单的安装方式
 
@@ -79,7 +79,7 @@ Rust 版和 Node 回退版不能同时监听 8787。
 
 - Responses 文本、图片和视频输入转换
 - 非流式与 SSE 流式输出
-- function tools 与 Responses custom tools
+- 顶层及 `namespace` 内的 function tools 与 Responses custom tools
 - 多轮工具调用所需的 Kimi `reasoning_content` 内存保留
 - `low` / `high` / `max` 推理强度映射
 - JSON Object 与 JSON Schema 输出格式
@@ -114,6 +114,19 @@ multi_agent_v2 = true
 ```
 
 不要创建重复的 `[features]` 表。
+
+### 递归子代理与命名空间工具
+
+`0.3.0` 支持 Codex Responses 协议的 `namespace` 工具：命名空间内的 `function` 与 `custom` 工具会以可碰撞规避的安全名称发送给 Kimi，并在非流式响应、流式事件和后续历史回放中恢复原始 `namespace + name`。因此，只要当前 Codex 版本把 `collaboration` 工具提供给 `kimi_frontend`，Kimi 就可以作为原生子代理调用 `spawn_agent`，它创建的后代代理也走同一条协议转换路径。
+
+桥接只做协议转换，不接管 Codex 的代理调度：
+
+- 不设置额外的递归深度上限
+- 不设置额外的子代理或孙代理并发上限
+- 不强制每个任务声明停止条件
+- 实际调度、界面展示、权限、沙箱和全局线程数仍由 Codex Desktop 控制
+
+如果用户在 `[agents]` 中设置了 `max_concurrent_threads_per_session`，它仍会作为 Codex 的全局并发限制生效。`namespace` 目前只接受其内部的 `function` 与 `custom`；其他无法安全转换的托管工具类型会明确报错，不会被静默丢弃。
 
 ## Codex Provider 配置
 
@@ -156,7 +169,6 @@ model = "k3"
 model_context_window = 1048576
 model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
-model_supports_reasoning_summaries = false
 
 sandbox_mode = "read-only"
 
@@ -181,9 +193,30 @@ developer_instructions = """
 结论必须具体，避免只有“更现代”“更美观”等抽象描述。
 完成后向主代理返回简明、可执行的总结。
 """
+
+web_search = "disabled"
+include_apps_instructions = false
+
+[features]
+apps = false
+plugins = false
+remote_plugin = false
+tool_search = false
+image_generation = false
+computer_use = false
+browser_use = false
+in_app_browser = false
+multi_agent = true
+multi_agent_v2 = true
+goals = false
+
+[mcp_servers.node_repl]
+enabled = false
+command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"
+args = []
 ```
 
-`xhigh` 会转换为 Kimi K3 的 `max`。角色指令可以按任务修改；若只希望 Kimi 提供建议，请保留 `sandbox_mode = "read-only"` 和只读指令。
+`xhigh` 会转换为 Kimi K3 的 `max`。模板关闭桥接尚不能安全转换的托管工具，并明确保留 `multi_agent_v2`，因此 Kimi 仍可使用 Codex 原生协作工具。角色指令可以按任务修改；若只希望 Kimi 提供建议，请保留 `sandbox_mode = "read-only"` 和只读指令。
 
 ## 按会员等级选择 Kimi Code 模型
 
@@ -239,7 +272,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-开放平台路线在 `0.2.0-alpha.2` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
+开放平台路线在 `0.3.0` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
 
 ## 保存或更换 API Key
 
@@ -307,12 +340,12 @@ npm run smoke
 
 ## 已知边界
 
-- 只安全转换 Responses 的 `function` 和 `custom` tools；托管型工具会明确报错
+- 安全转换顶层及 `namespace` 内的 Responses `function` 和 `custom` tools；其他托管型工具会明确报错
 - 不支持 `previous_response_id`；调用方需要发送完整对话 items
 - `parallel_tool_calls` 不转发
 - reasoning 状态只在当前桥接进程内存中；工具链中途重启后应新开子代理任务
 - Desktop 是否允许调度第三方 provider 子代理仍由 Codex 客户端决定
-- Rust alpha 二进制尚未做 Apple 公证
+- macOS 二进制尚未做 Apple 公证
 
 ## 许可证
 

@@ -129,7 +129,7 @@ package_architecture "x86_64" "$INTEL_SOURCE"
 
 mkdir -p "$STAGE_DIR/npm-cache"
 NPM_ARCHIVE="$(npm_config_cache="$STAGE_DIR/npm-cache" npm pack --silent --pack-destination "$OUTPUT_DIR" "$PROJECT_DIR/node" | tail -n 1)"
-if [[ "$NPM_ARCHIVE" != "codex-kimi-bridge-node-0.1.0.tgz" || ! -f "$OUTPUT_DIR/$NPM_ARCHIVE" ]]; then
+if [[ "$NPM_ARCHIVE" != "codex-kimi-bridge-node-0.2.0.tgz" || ! -f "$OUTPUT_DIR/$NPM_ARCHIVE" ]]; then
   echo "unexpected Node fallback archive: $NPM_ARCHIVE" >&2
   exit 1
 fi

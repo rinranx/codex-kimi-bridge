@@ -15,13 +15,13 @@ Rust is the default implementation starting with `0.2.0-alpha.1`. Users do not n
 ## Downloads
 
 - Project: <https://github.com/rinranx/codex-kimi-bridge>
-- Current release: [`v0.2.0-alpha.2`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.2.0-alpha.2)
-- Recommended universal macOS kit (Apple Silicon + Intel): <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
-- Apple Silicon binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-arm64-0.2.0-alpha.2.tar.gz>
-- Intel Mac binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.2.tar.gz>
-- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/SHA256SUMS.txt>
+- Current release: [`v0.3.0`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.3.0)
+- Recommended universal macOS kit (Apple Silicon + Intel): <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-install-kit-0.3.0.zip>
+- Apple Silicon binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-arm64-0.3.0.tar.gz>
+- Intel Mac binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-x86_64-0.3.0.tar.gz>
+- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/SHA256SUMS.txt>
 
-Build artifacts are published only to versioned GitHub Releases; files under `main/downloads` are no longer overwritten. This is still an alpha and is not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
+Build artifacts are published only to versioned GitHub Releases; files under `main/downloads` are no longer overwritten. The current macOS binaries are not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
 
 ## Simplest installation
 
@@ -79,7 +79,7 @@ The Rust and Node fallback implementations cannot listen on port 8787 simultaneo
 
 - Responses text, image, and video conversion
 - Non-streaming and SSE streaming output
-- Function tools and Responses custom tools
+- Function tools and Responses custom tools at the top level and inside `namespace`
 - In-memory preservation of Kimi `reasoning_content` across tool calls
 - `low` / `high` / `max` reasoning-effort mapping
 - JSON Object and JSON Schema output
@@ -114,6 +114,19 @@ multi_agent_v2 = true
 ```
 
 Do not create a duplicate `[features]` table.
+
+### Recursive subagents and namespace tools
+
+Version `0.3.0` supports `namespace` tools in the Codex Responses protocol. Inner `function` and `custom` tools are sent to Kimi under collision-safe upstream names, then restored to their original `namespace + name` in non-streaming responses, streaming events, and later history replay. When the current Codex version exposes the `collaboration` namespace to `kimi_frontend`, Kimi can therefore call `spawn_agent` as a native subagent, and descendant agents use the same translation path.
+
+The bridge translates protocol messages; it does not replace the Codex scheduler:
+
+- No additional recursion-depth limit is imposed by the bridge
+- No additional child or grandchild concurrency cap is imposed by the bridge
+- The bridge does not require every task to declare a stop condition
+- Scheduling, UI, permissions, sandboxing, and the global thread limit remain owned by Codex Desktop
+
+If `[agents]` defines `max_concurrent_threads_per_session`, that Codex-wide limit still applies. A `namespace` may currently contain only `function` and `custom` tools. Other hosted tool types that cannot be translated safely are rejected explicitly instead of being dropped silently.
 
 ## Codex provider configuration
 
@@ -156,7 +169,6 @@ model = "k3"
 model_context_window = 1048576
 model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
-model_supports_reasoning_summaries = false
 
 sandbox_mode = "read-only"
 
@@ -181,9 +193,30 @@ Remain read-only by default and do not modify files directly.
 Be specific; avoid abstract recommendations such as only saying “more modern” or “more polished.”
 Return a concise, actionable summary to the primary agent when finished.
 """
+
+web_search = "disabled"
+include_apps_instructions = false
+
+[features]
+apps = false
+plugins = false
+remote_plugin = false
+tool_search = false
+image_generation = false
+computer_use = false
+browser_use = false
+in_app_browser = false
+multi_agent = true
+multi_agent_v2 = true
+goals = false
+
+[mcp_servers.node_repl]
+enabled = false
+command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"
+args = []
 ```
 
-The bridge maps `xhigh` to Kimi K3 `max`. You may customize the role, but keep `sandbox_mode = "read-only"` and the read-only instruction when Kimi should only advise.
+The bridge maps `xhigh` to Kimi K3 `max`. The template disables hosted tools that the bridge cannot yet translate safely while explicitly retaining `multi_agent_v2`, so Kimi can still use Codex's native collaboration tools. You may customize the role, but keep `sandbox_mode = "read-only"` and the read-only instruction when Kimi should only advise.
 
 ## Choose a Kimi Code model by membership tier
 
@@ -237,7 +270,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-Open Platform remains an advanced route in `0.2.0-alpha.2`. Release validation primarily uses a Kimi Code membership key.
+Open Platform remains an advanced route in `0.3.0`. Release validation primarily uses a Kimi Code membership key.
 
 ## Store or replace the API key
 
@@ -305,12 +338,12 @@ The shared compatibility fixture is [`compat/responses-request.json`](compat/res
 
 ## Known boundaries
 
-- Only Responses `function` and `custom` tools are translated safely; hosted tools fail explicitly
+- Responses `function` and `custom` tools are translated safely at the top level and inside `namespace`; other hosted tools fail explicitly
 - `previous_response_id` is unsupported; callers must send full conversation items
 - `parallel_tool_calls` is not forwarded
 - Reasoning state exists only in the current process; start a new subagent task after a mid-chain restart
 - Third-party-provider subagent scheduling remains controlled by Codex Desktop
-- The Rust alpha binary is not yet Apple-notarized
+- The macOS binaries are not yet Apple-notarized
 
 ## License
 

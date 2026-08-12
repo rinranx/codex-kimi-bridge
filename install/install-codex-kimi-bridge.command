@@ -7,7 +7,7 @@ SOURCE_BIN="$SCRIPT_DIR/bin/codex-kimi-bridge"
 CHECKSUM_FILE="$SCRIPT_DIR/BINARY-SHA256.txt"
 TARGET_DIR="$HOME/.local/bin"
 TARGET_BIN="$TARGET_DIR/codex-kimi-bridge"
-EXPECTED_VERSION="0.2.0-alpha.2"
+EXPECTED_VERSION="0.3.0"
 
 if [[ ! -f "$SOURCE_BIN" ]]; then
   print -u2 "安装包不完整：找不到 bin/codex-kimi-bridge。"

@@ -6,7 +6,6 @@ model = "k3"
 model_context_window = 1048576
 model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
-model_supports_reasoning_summaries = false
 
 sandbox_mode = "read-only"
 
@@ -31,3 +30,24 @@ developer_instructions = """
 结论必须具体，避免只有“更现代”“更美观”等抽象描述。
 完成后向主代理返回简明、可执行的总结。
 """
+
+web_search = "disabled"
+include_apps_instructions = false
+
+[features]
+apps = false
+plugins = false
+remote_plugin = false
+tool_search = false
+image_generation = false
+computer_use = false
+browser_use = false
+in_app_browser = false
+multi_agent = true
+multi_agent_v2 = true
+goals = false
+
+[mcp_servers.node_repl]
+enabled = false
+command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"
+args = []

@@ -53,7 +53,7 @@ test("bridges a non-streaming request without logging the body or token", async 
   assert.equal(response.statusCode, 200);
   assert.equal(result.output[0].content[0].text, "KIMI_BRIDGE_OK");
   assert.equal(captured.authorization, "Bearer super-secret-test-token");
-  assert.equal(captured.userAgent, "codex-kimi-bridge-node/0.1.0");
+  assert.equal(captured.userAgent, "codex-kimi-bridge-node/0.2.0");
   assert.equal(captured.body.messages[0].content, "PRIVATE_PROMPT_MARKER");
   assert.equal(captured.body.reasoning_effort, "low");
   assert.equal(logs.join("\n").includes("super-secret-test-token"), false);

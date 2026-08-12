@@ -25,9 +25,9 @@ https://github.com/rinranx/codex-kimi-bridge
 
 Follow these requirements exactly:
 
-1. Read README.en.md, INSTALL-WITH-CODEX.en.md, install/INSTALL-GUIDE.en.md, SECURITY.md, and the SHA-256 files attached to GitHub Release v0.2.0-alpha.2 before installing.
-2. Install the default Rust single-binary codex-kimi-bridge 0.2.0-alpha.2. Do not install similarly named npm packages or treat the node/ fallback as the default. A new installation requires no Rust, Node.js, or npm.
-3. Download the macOS kit only from this repository's versioned GitHub Release v0.2.0-alpha.2, verify SHA-256, and install it at ~/.local/bin/codex-kimi-bridge without sudo. Do not obtain build artifacts from main/downloads.
+1. Read README.en.md, INSTALL-WITH-CODEX.en.md, install/INSTALL-GUIDE.en.md, SECURITY.md, and the SHA-256 files attached to GitHub Release v0.3.0 before installing.
+2. Install the default Rust single-binary codex-kimi-bridge 0.3.0. Do not install similarly named npm packages or treat the node/ fallback as the default. A new installation requires no Rust, Node.js, or npm.
+3. Download the macOS kit only from this repository's versioned GitHub Release v0.3.0, verify SHA-256, and install it at ~/.local/bin/codex-kimi-bridge without sudo. Do not obtain build artifacts from main/downloads.
 4. Before installation, inspect command -v codex-kimi-bridge and port 8787 without changing state. If an old npm 0.1.0 command or unknown listener exists, report its exact path/process and ask before uninstalling, overwriting, or stopping anything. After approval, the old official npm package may be removed with npm uninstall --global codex-kimi-bridge.
 5. Ask for my key type and membership if I did not provide them. Use the README table to select the correct model, upstream, context window, and auto-compact limit. Do not assume Allegretto 1M access. Kimi Code membership and Kimi API Open Platform keys, models, and endpoints are not interchangeable.
 6. Never ask me to paste the API key into chat. Use the macOS Keychain command and let me enter it only at the secure terminal prompt. Keep the service name codex-kimi-code-api-key; never display, log, or repeat the secret.
@@ -45,7 +45,7 @@ Follow these requirements exactly:
 
 ## Expected result
 
-- `~/.local/bin/codex-kimi-bridge --version` prints `0.2.0-alpha.2`
+- `~/.local/bin/codex-kimi-bridge --version` prints `0.3.0`
 - `/health` identifies `implementation: rust`
 - The API key exists only in Keychain
 - Existing Codex settings remain intact with no duplicate TOML tables
@@ -54,6 +54,6 @@ Follow these requirements exactly:
 - One of Codex on demand, visible Terminal, or LaunchAgent has been explicitly selected
 - No real Kimi request was sent without approval
 
-If Codex cannot read GitHub, manually download the [complete macOS kit](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip), provide the extracted folder, and change the prompt's first line to “Install from the local installation-kit folder I provided.”
+If Codex cannot read GitHub, manually download the [complete macOS kit](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-install-kit-0.3.0.zip), provide the extracted folder, and change the prompt's first line to “Install from the local installation-kit folder I provided.”
 
 See the [complete installation guide](install/INSTALL-GUIDE.en.md) for every manual step.

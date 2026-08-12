@@ -293,6 +293,250 @@ test("converts streamed function and custom tool calls", async () => {
   assert.equal(reasoningStore.get("call_patch"), "reasoning part one part two");
 });
 
+test("round-trips namespaced collaboration tools across request, history, and response", () => {
+  const translated = translateResponsesRequest({
+    model: "k3",
+    input: [
+      { role: "user", content: "Create a child agent." },
+      {
+        type: "function_call",
+        call_id: "call_spawn_previous",
+        namespace: "collaboration",
+        name: "spawn_agent",
+        arguments: "{\"task\":\"inspect\"}",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_spawn_previous",
+        output: "child-ready",
+      },
+      {
+        type: "custom_tool_call",
+        call_id: "call_note_previous",
+        namespace: "collaboration",
+        name: "handoff_note",
+        input: "continue recursively",
+      },
+      {
+        type: "custom_tool_call_output",
+        call_id: "call_note_previous",
+        output: "accepted",
+      },
+    ],
+    tools: [
+      {
+        type: "namespace",
+        name: "collaboration",
+        description: "Create and coordinate descendant agents.",
+        tools: [
+          {
+            type: "function",
+            name: "spawn_agent",
+            description: "Create a child agent.",
+            parameters: {
+              type: "object",
+              properties: { task: { type: "string" } },
+              required: ["task"],
+              additionalProperties: false,
+            },
+          },
+          {
+            type: "custom",
+            name: "handoff_note",
+            description: "Send a free-form handoff note.",
+          },
+        ],
+      },
+    ],
+    tool_choice: {
+      type: "function",
+      namespace: "collaboration",
+      name: "spawn_agent",
+    },
+    stream: false,
+  });
+
+  const spawnEntry = [...translated.context.toolMap.entries()].find(
+    ([, mapping]) =>
+      mapping.namespace === "collaboration" && mapping.name === "spawn_agent",
+  );
+  const noteEntry = [...translated.context.toolMap.entries()].find(
+    ([, mapping]) =>
+      mapping.namespace === "collaboration" && mapping.name === "handoff_note",
+  );
+  assert.ok(spawnEntry);
+  assert.ok(noteEntry);
+  const [spawnUpstreamName] = spawnEntry;
+  const [noteUpstreamName] = noteEntry;
+  assert.match(spawnUpstreamName, /^[a-zA-Z0-9_-]{1,64}$/);
+  assert.match(noteUpstreamName, /^[a-zA-Z0-9_-]{1,64}$/);
+  assert.equal(translated.body.messages[1].tool_calls[0].function.name, spawnUpstreamName);
+  assert.equal(translated.body.messages[3].tool_calls[0].function.name, noteUpstreamName);
+  assert.equal(translated.body.tool_choice.function.name, spawnUpstreamName);
+
+  const response = translateChatCompletion(
+    {
+      id: "chatcmpl_namespace",
+      model: "k3",
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "call_spawn",
+                type: "function",
+                function: {
+                  name: spawnUpstreamName,
+                  arguments: "{\"task\":\"grandchild\"}",
+                },
+              },
+              {
+                id: "call_note",
+                type: "function",
+                function: {
+                  name: noteUpstreamName,
+                  arguments: "{\"input\":\"handoff\"}",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    translated.context,
+  );
+
+  assert.deepEqual(
+    {
+      type: response.output[0].type,
+      namespace: response.output[0].namespace,
+      name: response.output[0].name,
+    },
+    { type: "function_call", namespace: "collaboration", name: "spawn_agent" },
+  );
+  assert.deepEqual(
+    {
+      type: response.output[1].type,
+      namespace: response.output[1].namespace,
+      name: response.output[1].name,
+      input: response.output[1].input,
+    },
+    {
+      type: "custom_tool_call",
+      namespace: "collaboration",
+      name: "handoff_note",
+      input: "handoff",
+    },
+  );
+});
+
+test("streams a split namespaced tool name only after it can be routed", async () => {
+  const translated = translateResponsesRequest({
+    model: "k3",
+    input: "Create a descendant agent.",
+    tools: [
+      {
+        type: "namespace",
+        name: "collaboration",
+        description: "Coordinate agents.",
+        tools: [
+          {
+            type: "function",
+            name: "spawn_agent",
+            parameters: { type: "object" },
+          },
+        ],
+      },
+    ],
+    stream: true,
+  });
+  const upstreamName = translated.body.tools[0].function.name;
+  const splitAt = Math.max(1, Math.floor(upstreamName.length / 2));
+  const upstream = sseReadable([
+    {
+      id: "chatcmpl_split_namespace",
+      model: "k3",
+      choices: [{
+        index: 0,
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: "call_spawn",
+            type: "function",
+            function: { name: upstreamName.slice(0, splitAt), arguments: "" },
+          }],
+        },
+        finish_reason: null,
+      }],
+    },
+    {
+      id: "chatcmpl_split_namespace",
+      model: "k3",
+      choices: [{
+        index: 0,
+        delta: {
+          tool_calls: [{
+            index: 0,
+            function: {
+              name: upstreamName.slice(splitAt),
+              arguments: "{\"task\":\"grandchild\"}",
+            },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+    },
+  ]);
+
+  const events = [];
+  for await (const event of translateChatCompletionStream(upstream, translated.context)) {
+    events.push(event);
+  }
+  const added = events.find((event) => event.type === "response.output_item.added");
+  assert.equal(added.item.name, "spawn_agent");
+  assert.equal(added.item.namespace, "collaboration");
+  const completed = events.at(-1).response.output[0];
+  assert.equal(completed.name, "spawn_agent");
+  assert.equal(completed.namespace, "collaboration");
+});
+
+test("keeps generated namespace names short and collision-safe", () => {
+  const namespaceTool = {
+    type: "namespace",
+    name: `collaboration-${"n".repeat(100)}`,
+    description: "Long namespace.",
+    tools: [
+      {
+        type: "function",
+        name: `spawn-${"t".repeat(100)}`,
+        parameters: { type: "object" },
+      },
+    ],
+  };
+  const baseline = translateResponsesRequest({
+    input: "test",
+    tools: [namespaceTool],
+    stream: false,
+  });
+  const firstName = baseline.body.tools[0].function.name;
+  assert.equal(firstName.length, 64);
+
+  const collided = translateResponsesRequest({
+    input: "test",
+    tools: [
+      namespaceTool,
+      { type: "function", name: firstName, parameters: { type: "object" } },
+    ],
+    stream: false,
+  });
+  const secondName = collided.body.tools[0].function.name;
+  assert.notEqual(secondName, firstName);
+  assert.ok(secondName.length <= 64);
+  assert.equal(collided.context.toolMap.get(secondName).namespace, namespaceTool.name);
+});
+
 function sseReadable(objects) {
   const text =
     objects.map((object) => `data: ${JSON.stringify(object)}\n\n`).join("") +

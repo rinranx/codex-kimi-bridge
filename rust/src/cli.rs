@@ -243,7 +243,7 @@ fn translate_request_command(parsed: &ParsedArgs, json_output: bool) -> BridgeRe
             .context
             .tool_map
             .iter()
-            .map(|(name, kind)| (name.clone(), Value::String(kind.as_str().into())))
+            .map(|(name, mapping)| (name.clone(), Value::String(mapping.kind.as_str().into())))
             .collect();
         println!(
             "{}",

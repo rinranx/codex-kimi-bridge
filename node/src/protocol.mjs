@@ -17,6 +17,7 @@ export function translateResponsesRequest(input, options = {}) {
   }
 
   const model = nonEmptyString(input.model) ?? options.defaultModel ?? "k3";
+  const { chatTools, toolMap } = translateTools(input.tools ?? []);
   const messages = [];
 
   if (input.instructions !== undefined && input.instructions !== null) {
@@ -26,7 +27,7 @@ export function translateResponsesRequest(input, options = {}) {
     });
   }
 
-  appendResponsesInput(messages, input.input, options.reasoningStore);
+  appendResponsesInput(messages, input.input, toolMap, options.reasoningStore);
 
   if (messages.length === 0) {
     throw new BridgeError("input must contain at least one message.", {
@@ -35,7 +36,6 @@ export function translateResponsesRequest(input, options = {}) {
     });
   }
 
-  const { chatTools, toolMap } = translateTools(input.tools ?? []);
   const stream = input.stream !== false;
   const body = {
     model,
@@ -249,7 +249,10 @@ export async function* translateChatCompletionStream(readable, context = {}) {
 
     for (const toolDelta of delta.tool_calls ?? []) {
       const toolState = ensureToolState(state, toolDelta, context.toolMap);
-      if (!toolState.added && toolState.name) {
+      if (
+        !toolState.added &&
+        upstreamToolNameIsComplete(context.toolMap, toolState.upstreamName)
+      ) {
         toolState.added = true;
         yield event(state, "response.output_item.added", {
           output_index: toolState.outputIndex,
@@ -379,7 +382,7 @@ export async function* translateChatCompletionStream(readable, context = {}) {
   });
 }
 
-function appendResponsesInput(messages, input, reasoningStore) {
+function appendResponsesInput(messages, input, toolMap, reasoningStore) {
   if (typeof input === "string") {
     messages.push({ role: "user", content: input });
     return;
@@ -406,21 +409,33 @@ function appendResponsesInput(messages, input, reasoningStore) {
       messages.push(translateMessage(item));
     } else if (item.type === "function_call") {
       const callId = item.call_id ?? item.id ?? makeId("call");
+      const upstreamName = resolveUpstreamToolName(
+        toolMap,
+        item.name ?? "",
+        nonEmptyString(item.namespace),
+        "function",
+      );
       appendAssistantToolCall(messages, {
         id: callId,
         type: "function",
         function: {
-          name: item.name,
+          name: upstreamName,
           arguments: stringifyArguments(item.arguments),
         },
       }, reasoningStore?.get?.(callId));
     } else if (item.type === "custom_tool_call") {
       const callId = item.call_id ?? item.id ?? makeId("call");
+      const upstreamName = resolveUpstreamToolName(
+        toolMap,
+        item.name ?? "",
+        nonEmptyString(item.namespace),
+        "custom",
+      );
       appendAssistantToolCall(messages, {
         id: callId,
         type: "function",
         function: {
-          name: item.name,
+          name: upstreamName,
           arguments: JSON.stringify({ input: coerceToolOutput(item.input) }),
         },
       }, reasoningStore?.get?.(callId));
@@ -533,11 +548,22 @@ function translateContent(content, role) {
   return parts;
 }
 
+const UPSTREAM_TOOL_NAME_LIMIT = 64;
+
 function translateTools(tools) {
   if (!Array.isArray(tools)) {
     throw new BridgeError("tools must be an array.", { param: "tools" });
   }
 
+  const reservedPlainNames = new Set(
+    tools
+      .filter(
+        (tool) =>
+          tool && (tool.type === "function" || tool.type === "custom"),
+      )
+      .map((tool) => nonEmptyString(tool.name ?? tool.function?.name))
+      .filter(Boolean),
+  );
   const chatTools = [];
   const toolMap = new Map();
   for (const tool of tools) {
@@ -545,57 +571,209 @@ function translateTools(tools) {
       throw new BridgeError("Every tool must be an object.", { param: "tools" });
     }
 
-    if (tool.type === "function") {
-      const name = requireToolName(tool.name ?? tool.function?.name);
-      const definition = tool.function ?? tool;
-      chatTools.push({
-        type: "function",
-        function: {
-          name,
-          description: definition.description ?? "",
-          parameters: definition.parameters ?? {
-            type: "object",
-            properties: {},
-            additionalProperties: false,
-          },
-          ...(typeof definition.strict === "boolean" ? { strict: definition.strict } : {}),
-        },
-      });
-      toolMap.set(name, { kind: "function", original: tool });
+    if (tool.type === "function" || tool.type === "custom") {
+      translateSingleTool(
+        tool,
+        null,
+        null,
+        chatTools,
+        toolMap,
+        reservedPlainNames,
+      );
       continue;
     }
 
-    if (tool.type === "custom") {
-      const name = requireToolName(tool.name);
-      const formatNote = tool.format
-        ? `\nOriginal input constraint: ${JSON.stringify(tool.format)}`
-        : "";
-      chatTools.push({
-        type: "function",
-        function: {
-          name,
-          description: `${tool.description ?? "Accepts free-form text input."}\nReturn the exact free-form tool input in the JSON field \"input\".${formatNote}`,
-          parameters: {
-            type: "object",
-            properties: {
-              input: { type: "string", description: "Exact free-form input for the tool." },
-            },
-            required: ["input"],
-            additionalProperties: false,
-          },
-          strict: true,
-        },
-      });
-      toolMap.set(name, { kind: "custom", original: tool });
+    if (tool.type === "namespace") {
+      const namespace = requireNamespaceName(tool.name);
+      if (!Array.isArray(tool.tools)) {
+        throw new BridgeError("Every namespace tool must contain a tools array.", {
+          param: "tools",
+        });
+      }
+      for (const innerTool of tool.tools) {
+        if (!innerTool || typeof innerTool !== "object") {
+          throw new BridgeError("Every namespaced tool must be an object.", {
+            param: "tools",
+          });
+        }
+        if (innerTool.type !== "function" && innerTool.type !== "custom") {
+          throw new BridgeError(
+            `Unsupported tool type inside namespace ${namespace}: ${innerTool.type ?? "unknown"}. Only function and custom tools can be translated safely.`,
+            { param: "tools", code: "unsupported_tool_type" },
+          );
+        }
+        translateSingleTool(
+          innerTool,
+          namespace,
+          typeof tool.description === "string" ? tool.description : "",
+          chatTools,
+          toolMap,
+          reservedPlainNames,
+        );
+      }
       continue;
     }
 
     throw new BridgeError(
-      `Unsupported Responses tool type: ${tool.type ?? "unknown"}. Only function and custom tools can be translated safely.`,
+      `Unsupported Responses tool type: ${tool.type ?? "unknown"}. Only function, custom, and namespace tools can be translated safely.`,
       { param: "tools", code: "unsupported_tool_type" },
     );
   }
   return { chatTools, toolMap };
+}
+
+function translateSingleTool(
+  tool,
+  namespace,
+  namespaceDescription,
+  chatTools,
+  toolMap,
+  reservedPlainNames,
+) {
+  const definition = tool.function ?? tool;
+  const name = requireToolName(tool.name ?? definition.name);
+  const kind = tool.type === "custom" ? "custom" : "function";
+  const upstreamName = registerToolMapping(toolMap, reservedPlainNames, {
+    kind,
+    name,
+    namespace,
+    original: tool,
+  });
+  const description = namespacedToolDescription(
+    namespace,
+    namespaceDescription,
+    name,
+    definition.description ?? (kind === "custom" ? "Accepts free-form text input." : ""),
+  );
+
+  if (kind === "custom") {
+    const formatNote = definition.format
+      ? `\nOriginal input constraint: ${JSON.stringify(definition.format)}`
+      : "";
+    chatTools.push({
+      type: "function",
+      function: {
+        name: upstreamName,
+        description: `${description}\nReturn the exact free-form tool input in the JSON field \"input\".${formatNote}`,
+        parameters: {
+          type: "object",
+          properties: {
+            input: { type: "string", description: "Exact free-form input for the tool." },
+          },
+          required: ["input"],
+          additionalProperties: false,
+        },
+        strict: true,
+      },
+    });
+    return;
+  }
+
+  chatTools.push({
+    type: "function",
+    function: {
+      name: upstreamName,
+      description,
+      parameters: definition.parameters ?? {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      ...(typeof definition.strict === "boolean" ? { strict: definition.strict } : {}),
+    },
+  });
+}
+
+function registerToolMapping(toolMap, reservedPlainNames, mapping) {
+  if (
+    [...toolMap.values()].some(
+      (existing) =>
+        existing.name === mapping.name &&
+        (existing.namespace ?? null) === (mapping.namespace ?? null),
+    )
+  ) {
+    throw new BridgeError(
+      `Duplicate Responses tool identity: ${mapping.namespace ? `${mapping.namespace}/` : ""}${mapping.name}.`,
+      { param: "tools" },
+    );
+  }
+  if (!mapping.namespace) {
+    if (toolMap.has(mapping.name)) {
+      throw new BridgeError(`Duplicate Responses tool name: ${mapping.name}.`, {
+        param: "tools",
+      });
+    }
+    toolMap.set(mapping.name, mapping);
+    return mapping.name;
+  }
+
+  for (let salt = 0; salt <= 0xffffffff; salt += 1) {
+    const upstreamName = namespacedUpstreamName(mapping.namespace, mapping.name, salt);
+    if (!toolMap.has(upstreamName) && !reservedPlainNames.has(upstreamName)) {
+      toolMap.set(upstreamName, mapping);
+      return upstreamName;
+    }
+  }
+  throw new BridgeError("Unable to allocate a unique upstream tool name.", {
+    param: "tools",
+  });
+}
+
+function namespacedUpstreamName(namespace, name, salt = 0) {
+  const namespaceHint = sanitizeToolNameComponent(namespace);
+  const nameHint = sanitizeToolNameComponent(name);
+  const suffix = hash(`${namespace}\0${name}\0${salt}`).slice(0, 12);
+  const maxHintLength = UPSTREAM_TOOL_NAME_LIMIT - suffix.length - 1;
+  const hint = `ns_${namespaceHint}_${nameHint}`.slice(0, maxHintLength);
+  return `${hint}_${suffix}`;
+}
+
+function sanitizeToolNameComponent(value) {
+  const sanitized = Array.from(String(value), (character) =>
+    /[a-zA-Z0-9_-]/.test(character) ? character : "_"
+  ).join("");
+  return sanitized || "tool";
+}
+
+function namespacedToolDescription(
+  namespace,
+  namespaceDescription,
+  name,
+  description,
+) {
+  if (!namespace) {
+    return description;
+  }
+  const lines = [
+    `Codex namespaced tool: namespace \`${namespace}\`, tool \`${name}\`.`,
+  ];
+  if (namespaceDescription) {
+    lines.push(`Namespace description: ${namespaceDescription}`);
+  }
+  if (description) {
+    lines.push(description);
+  }
+  return lines.join("\n");
+}
+
+function findUpstreamToolName(toolMap, name, namespace, kind = null) {
+  for (const [upstreamName, mapping] of toolMap ?? []) {
+    if (
+      mapping.name === name &&
+      (mapping.namespace ?? null) === (namespace ?? null) &&
+      (!kind || mapping.kind === kind)
+    ) {
+      return upstreamName;
+    }
+  }
+  return null;
+}
+
+function resolveUpstreamToolName(toolMap, name, namespace, kind = null) {
+  return (
+    findUpstreamToolName(toolMap, name, namespace, kind) ??
+    (namespace ? namespacedUpstreamName(namespace, name) : name)
+  );
 }
 
 function translateToolChoice(choice, toolMap) {
@@ -611,12 +789,19 @@ function translateToolChoice(choice, toolMap) {
     }
     const name = choice.name ?? choice.function?.name;
     if (nonEmptyString(name)) {
-      if (toolMap.size > 0 && !toolMap.has(name)) {
-        throw new BridgeError(`tool_choice refers to an unknown tool: ${name}.`, {
+      const namespace = nonEmptyString(choice.namespace ?? choice.function?.namespace);
+      const upstreamName = findUpstreamToolName(toolMap, name, namespace);
+      if (toolMap.size > 0 && !upstreamName) {
+        throw new BridgeError(`tool_choice refers to an unknown tool: ${namespace ? `${namespace}/` : ""}${name}.`, {
           param: "tool_choice",
         });
       }
-      return { type: "function", function: { name } };
+      return {
+        type: "function",
+        function: {
+          name: upstreamName ?? (namespace ? namespacedUpstreamName(namespace, name) : name),
+        },
+      };
     }
   }
   throw new BridgeError("Unsupported tool_choice value.", {
@@ -709,9 +894,11 @@ function makeCompletedMessage(text, id = makeId("msg")) {
 }
 
 function makeCompletedToolCall(toolCall, toolMap = new Map()) {
-  const name = toolCall?.function?.name;
-  const mapping = toolMap?.get?.(name);
+  const upstreamName = toolCall?.function?.name;
+  const mapping = toolMap?.get?.(upstreamName);
   const kind = mapping?.kind ?? "function";
+  const name = mapping?.name ?? upstreamName;
+  const namespace = mapping?.namespace ?? null;
   const callId = toolCall.id ?? makeId("call");
   if (kind === "custom") {
     return {
@@ -720,6 +907,7 @@ function makeCompletedToolCall(toolCall, toolMap = new Map()) {
       status: "completed",
       call_id: callId,
       name,
+      ...(namespace ? { namespace } : {}),
       input: extractCustomInput(toolCall.function?.arguments),
     };
   }
@@ -729,6 +917,7 @@ function makeCompletedToolCall(toolCall, toolMap = new Map()) {
     status: "completed",
     call_id: callId,
     name,
+    ...(namespace ? { namespace } : {}),
     arguments: toolCall.function?.arguments ?? "{}",
   };
 }
@@ -754,15 +943,17 @@ function ensureToolState(state, delta, toolMap = new Map()) {
   const chatIndex = Number.isInteger(delta.index) ? delta.index : 0;
   let toolState = state.toolCalls.get(chatIndex);
   if (!toolState) {
-    const name = delta.function?.name ?? "";
-    const mapping = toolMap?.get?.(name);
+    const upstreamName = delta.function?.name ?? "";
+    const mapping = toolMap?.get?.(upstreamName);
     const kind = mapping?.kind ?? "function";
     toolState = {
       chatIndex,
       outputIndex: state.nextOutputIndex++,
       itemId: makeId(kind === "custom" ? "ctc" : "fc"),
       callId: delta.id ?? makeId("call"),
-      name,
+      upstreamName,
+      name: mapping?.name ?? upstreamName,
+      namespace: mapping?.namespace ?? null,
       arguments: "",
       kind,
       added: false,
@@ -773,10 +964,18 @@ function ensureToolState(state, delta, toolMap = new Map()) {
       toolState.callId = delta.id;
     }
     if (delta.function?.name) {
-      toolState.name += delta.function.name;
-      const mapping = toolMap?.get?.(toolState.name);
+      toolState.upstreamName += delta.function.name;
+      const mapping = toolMap?.get?.(toolState.upstreamName);
       if (mapping) {
+        if (!toolState.added && toolState.kind !== mapping.kind) {
+          toolState.itemId = makeId(mapping.kind === "custom" ? "ctc" : "fc");
+        }
         toolState.kind = mapping.kind;
+        toolState.name = mapping.name;
+        toolState.namespace = mapping.namespace ?? null;
+      } else {
+        toolState.name = toolState.upstreamName;
+        toolState.namespace = null;
       }
     }
   }
@@ -791,6 +990,7 @@ function toolInProgressItem(toolState) {
       status: "in_progress",
       call_id: toolState.callId,
       name: toolState.name,
+      ...(toolState.namespace ? { namespace: toolState.namespace } : {}),
       input: "",
     };
   }
@@ -800,6 +1000,7 @@ function toolInProgressItem(toolState) {
     status: "in_progress",
     call_id: toolState.callId,
     name: toolState.name,
+    ...(toolState.namespace ? { namespace: toolState.namespace } : {}),
     arguments: "",
   };
 }
@@ -812,6 +1013,7 @@ function completedToolStateItem(toolState) {
       status: "completed",
       call_id: toolState.callId,
       name: toolState.name,
+      ...(toolState.namespace ? { namespace: toolState.namespace } : {}),
       input: extractCustomInput(toolState.arguments),
     };
   }
@@ -821,8 +1023,25 @@ function completedToolStateItem(toolState) {
     status: "completed",
     call_id: toolState.callId,
     name: toolState.name,
+    ...(toolState.namespace ? { namespace: toolState.namespace } : {}),
     arguments: toolState.arguments || "{}",
   };
+}
+
+function upstreamToolNameIsComplete(toolMap, upstreamName) {
+  if (!upstreamName) {
+    return false;
+  }
+  if (!toolMap || toolMap.size === 0) {
+    return true;
+  }
+  if (!toolMap.has(upstreamName)) {
+    return false;
+  }
+  return ![...toolMap.keys()].some(
+    (candidate) =>
+      candidate.length > upstreamName.length && candidate.startsWith(upstreamName),
+  );
 }
 
 function initializeStreamState(state, chunk, context) {
@@ -1004,6 +1223,15 @@ function extractCustomInput(argumentsText) {
 function requireToolName(name) {
   if (!nonEmptyString(name)) {
     throw new BridgeError("Every function or custom tool must have a name.", {
+      param: "tools",
+    });
+  }
+  return name;
+}
+
+function requireNamespaceName(name) {
+  if (!nonEmptyString(name)) {
+    throw new BridgeError("Every namespace tool must have a name.", {
       param: "tools",
     });
   }

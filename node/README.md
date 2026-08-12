@@ -8,7 +8,7 @@
 
 - npm 包名：`codex-kimi-bridge-node`
 - 命令：`codex-kimi-bridge-node`
-- 版本：`0.1.0`
+- 版本：`0.2.0`
 - 默认地址仍为 `127.0.0.1:8787`
 - Keychain 项目仍为 `codex-kimi-code-api-key`
 
@@ -38,14 +38,14 @@ codex-kimi-bridge-node serve
 也可以在项目根目录安装已打包的回退文件：
 
 ```sh
-npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-node-0.1.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-node-0.2.0.tgz
 ```
 
 ## 功能
 
 - Responses 文本、图片和视频输入转换
 - 非流式与 SSE 流式输出
-- function 与 custom tools
+- 顶层及 `namespace` 内的 function 与 custom tools
 - 多轮工具调用所需的 Kimi `reasoning_content` 保留
 - JSON Object 与 JSON Schema 输出
 - 只监听 loopback、只允许安全上游、拒绝重定向

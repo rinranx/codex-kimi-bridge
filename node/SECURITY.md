@@ -1,6 +1,6 @@
 # Security: Node Fallback
 
-This file applies to the separately named `codex-kimi-bridge-node 0.1.0` fallback. The repository default is the Rust `codex-kimi-bridge` implementation described by the root security policy.
+This file applies to the separately named `codex-kimi-bridge-node 0.2.0` fallback. The repository default is the Rust `codex-kimi-bridge` implementation described by the root security policy.
 
 ## Secret handling
 

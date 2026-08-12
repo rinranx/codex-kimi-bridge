@@ -2,7 +2,7 @@ use crate::error::{BridgeError, BridgeResult};
 use crate::reasoning::ReasoningStore;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -22,11 +22,18 @@ impl ToolKind {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToolMapping {
+    pub kind: ToolKind,
+    pub name: String,
+    pub namespace: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct TranslationContext {
     pub model: String,
     pub original_request: Value,
-    pub tool_map: BTreeMap<String, ToolKind>,
+    pub tool_map: BTreeMap<String, ToolMapping>,
     pub prompt_cache_key: String,
     pub reasoning_store: Option<Arc<ReasoningStore>>,
 }
@@ -61,6 +68,8 @@ pub fn translate_responses_request(
         .and_then(non_empty_string)
         .unwrap_or(default_model)
         .to_owned();
+    let empty_tools = Value::Array(Vec::new());
+    let (chat_tools, tool_map) = translate_tools(request.get("tools").unwrap_or(&empty_tools))?;
     let mut messages = Vec::new();
 
     if let Some(instructions) = request.get("instructions").filter(|value| !value.is_null()) {
@@ -73,6 +82,7 @@ pub fn translate_responses_request(
     append_responses_input(
         &mut messages,
         request.get("input"),
+        &tool_map,
         reasoning_store.as_deref(),
     )?;
     if messages.is_empty() {
@@ -81,8 +91,6 @@ pub fn translate_responses_request(
             .code("missing_required_parameter"));
     }
 
-    let empty_tools = Value::Array(Vec::new());
-    let (chat_tools, tool_map) = translate_tools(request.get("tools").unwrap_or(&empty_tools))?;
     let stream = request.get("stream").and_then(Value::as_bool) != Some(false);
     let prompt_cache_key = derive_prompt_cache_key(&input, &model, &messages);
     let mut body = Map::new();
@@ -216,6 +224,7 @@ pub fn translate_chat_completion(
 fn append_responses_input(
     messages: &mut Vec<Value>,
     input: Option<&Value>,
+    tool_map: &BTreeMap<String, ToolMapping>,
     reasoning_store: Option<&ReasoningStore>,
 ) -> BridgeResult<()> {
     match input {
@@ -244,11 +253,19 @@ fn append_responses_input(
                         .and_then(non_empty_string)
                         .map(ToOwned::to_owned)
                         .unwrap_or_else(|| make_id("call"));
+                    let original_name = object.get("name").and_then(non_empty_string).unwrap_or("");
+                    let namespace = object.get("namespace").and_then(non_empty_string);
+                    let upstream_name = resolve_upstream_tool_name(
+                        tool_map,
+                        original_name,
+                        namespace,
+                        Some(ToolKind::Function),
+                    );
                     let tool_call = json!({
                         "id": call_id,
                         "type": "function",
                         "function": {
-                            "name": object.get("name").cloned().unwrap_or(Value::Null),
+                            "name": upstream_name,
                             "arguments": stringify_arguments(object.get("arguments")),
                         }
                     });
@@ -265,11 +282,19 @@ fn append_responses_input(
                         .map(ToOwned::to_owned)
                         .unwrap_or_else(|| make_id("call"));
                     let input = coerce_tool_output(object.get("input"));
+                    let original_name = object.get("name").and_then(non_empty_string).unwrap_or("");
+                    let namespace = object.get("namespace").and_then(non_empty_string);
+                    let upstream_name = resolve_upstream_tool_name(
+                        tool_map,
+                        original_name,
+                        namespace,
+                        Some(ToolKind::Custom),
+                    );
                     let tool_call = json!({
                         "id": call_id,
                         "type": "function",
                         "function": {
-                            "name": object.get("name").cloned().unwrap_or(Value::Null),
+                            "name": upstream_name,
                             "arguments": serde_json::to_string(&json!({ "input": input })).unwrap_or_else(|_| "{}".into()),
                         }
                     });
@@ -455,10 +480,28 @@ fn translate_content(content: Option<&Value>, role: &str) -> BridgeResult<Value>
     }
 }
 
-fn translate_tools(tools: &Value) -> BridgeResult<(Vec<Value>, BTreeMap<String, ToolKind>)> {
+const UPSTREAM_TOOL_NAME_LIMIT: usize = 64;
+
+fn translate_tools(tools: &Value) -> BridgeResult<(Vec<Value>, BTreeMap<String, ToolMapping>)> {
     let tools = tools
         .as_array()
         .ok_or_else(|| BridgeError::new("tools must be an array.").param("tools"))?;
+    let reserved_plain_names = tools
+        .iter()
+        .filter_map(Value::as_object)
+        .filter(|tool| {
+            matches!(
+                tool.get("type").and_then(Value::as_str),
+                Some("function" | "custom")
+            )
+        })
+        .filter_map(|tool| {
+            tool.get("name")
+                .or_else(|| tool.get("function").and_then(|value| value.get("name")))
+                .and_then(non_empty_string)
+                .map(str::to_owned)
+        })
+        .collect::<BTreeSet<_>>();
     let mut chat_tools = Vec::new();
     let mut tool_map = BTreeMap::new();
     for tool in tools {
@@ -466,86 +509,64 @@ fn translate_tools(tools: &Value) -> BridgeResult<(Vec<Value>, BTreeMap<String, 
             .as_object()
             .ok_or_else(|| BridgeError::new("Every tool must be an object.").param("tools"))?;
         match object.get("type").and_then(Value::as_str) {
-            Some("function") => {
-                let definition = object
-                    .get("function")
-                    .and_then(Value::as_object)
-                    .unwrap_or(object);
-                let name = object
-                    .get("name")
-                    .or_else(|| definition.get("name"))
-                    .and_then(non_empty_string)
-                    .ok_or_else(|| {
-                        BridgeError::new("Every function or custom tool must have a name.")
-                            .param("tools")
-                    })?;
-                let mut function = Map::new();
-                function.insert("name".into(), Value::String(name.into()));
-                function.insert(
-                    "description".into(),
-                    definition
-                        .get("description")
-                        .cloned()
-                        .unwrap_or_else(|| Value::String(String::new())),
-                );
-                function.insert(
-                    "parameters".into(),
-                    definition.get("parameters").cloned().unwrap_or_else(|| {
-                        json!({
-                            "type": "object",
-                            "properties": {},
-                            "additionalProperties": false,
-                        })
-                    }),
-                );
-                if let Some(strict) = definition.get("strict").and_then(Value::as_bool) {
-                    function.insert("strict".into(), Value::Bool(strict));
-                }
-                chat_tools.push(json!({ "type": "function", "function": function }));
-                tool_map.insert(name.into(), ToolKind::Function);
-            }
-            Some("custom") => {
-                let name = object
+            Some("function" | "custom") => translate_single_tool(
+                object,
+                None,
+                None,
+                &mut chat_tools,
+                &mut tool_map,
+                &reserved_plain_names,
+            )?,
+            Some("namespace") => {
+                let namespace = object
                     .get("name")
                     .and_then(non_empty_string)
                     .ok_or_else(|| {
-                        BridgeError::new("Every function or custom tool must have a name.")
-                            .param("tools")
+                        BridgeError::new("Every namespace tool must have a name.").param("tools")
                     })?;
-                let description = object
+                let namespace_description = object
                     .get("description")
                     .and_then(Value::as_str)
-                    .unwrap_or("Accepts free-form text input.");
-                let format_note = object
-                    .get("format")
-                    .map(|format| format!("\nOriginal input constraint: {format}"))
-                    .unwrap_or_default();
-                chat_tools.push(json!({
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "description": format!(
-                            "{description}\nReturn the exact free-form tool input in the JSON field \"input\".{format_note}"
-                        ),
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "input": {
-                                    "type": "string",
-                                    "description": "Exact free-form input for the tool."
-                                }
-                            },
-                            "required": ["input"],
-                            "additionalProperties": false,
-                        },
-                        "strict": true,
+                    .unwrap_or("");
+                let inner_tools =
+                    object
+                        .get("tools")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| {
+                            BridgeError::new("Every namespace tool must contain a tools array.")
+                                .param("tools")
+                        })?;
+                for inner_tool in inner_tools {
+                    let inner_object = inner_tool.as_object().ok_or_else(|| {
+                        BridgeError::new("Every namespaced tool must be an object.").param("tools")
+                    })?;
+                    if !matches!(
+                        inner_object.get("type").and_then(Value::as_str),
+                        Some("function" | "custom")
+                    ) {
+                        return Err(BridgeError::new(format!(
+                            "Unsupported tool type inside namespace {namespace}: {}. Only function and custom tools can be translated safely.",
+                            inner_object
+                                .get("type")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown")
+                        ))
+                        .param("tools")
+                        .code("unsupported_tool_type"));
                     }
-                }));
-                tool_map.insert(name.into(), ToolKind::Custom);
+                    translate_single_tool(
+                        inner_object,
+                        Some(namespace),
+                        Some(namespace_description),
+                        &mut chat_tools,
+                        &mut tool_map,
+                        &reserved_plain_names,
+                    )?;
+                }
             }
             other => {
                 return Err(BridgeError::new(format!(
-                    "Unsupported Responses tool type: {}. Only function and custom tools can be translated safely.",
+                    "Unsupported Responses tool type: {}. Only function, custom, and namespace tools can be translated safely.",
                     other.unwrap_or("unknown")
                 ))
                 .param("tools")
@@ -556,9 +577,220 @@ fn translate_tools(tools: &Value) -> BridgeResult<(Vec<Value>, BTreeMap<String, 
     Ok((chat_tools, tool_map))
 }
 
+fn translate_single_tool(
+    object: &Map<String, Value>,
+    namespace: Option<&str>,
+    namespace_description: Option<&str>,
+    chat_tools: &mut Vec<Value>,
+    tool_map: &mut BTreeMap<String, ToolMapping>,
+    reserved_plain_names: &BTreeSet<String>,
+) -> BridgeResult<()> {
+    let definition = object
+        .get("function")
+        .and_then(Value::as_object)
+        .unwrap_or(object);
+    let name = object
+        .get("name")
+        .or_else(|| definition.get("name"))
+        .and_then(non_empty_string)
+        .ok_or_else(|| {
+            BridgeError::new("Every function or custom tool must have a name.").param("tools")
+        })?;
+    let kind = match object.get("type").and_then(Value::as_str) {
+        Some("custom") => ToolKind::Custom,
+        _ => ToolKind::Function,
+    };
+    let upstream_name =
+        register_tool_mapping(tool_map, reserved_plain_names, kind, name, namespace)?;
+    let description = namespaced_tool_description(
+        namespace,
+        namespace_description,
+        name,
+        definition
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or(if kind == ToolKind::Custom {
+                "Accepts free-form text input."
+            } else {
+                ""
+            }),
+    );
+
+    if kind == ToolKind::Custom {
+        let format_note = definition
+            .get("format")
+            .map(|format| format!("\nOriginal input constraint: {format}"))
+            .unwrap_or_default();
+        chat_tools.push(json!({
+            "type": "function",
+            "function": {
+                "name": upstream_name,
+                "description": format!(
+                    "{description}\nReturn the exact free-form tool input in the JSON field \"input\".{format_note}"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "Exact free-form input for the tool."
+                        }
+                    },
+                    "required": ["input"],
+                    "additionalProperties": false,
+                },
+                "strict": true,
+            }
+        }));
+        return Ok(());
+    }
+
+    let mut function = Map::new();
+    function.insert("name".into(), Value::String(upstream_name));
+    function.insert("description".into(), Value::String(description));
+    function.insert(
+        "parameters".into(),
+        definition.get("parameters").cloned().unwrap_or_else(|| {
+            json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+            })
+        }),
+    );
+    if let Some(strict) = definition.get("strict").and_then(Value::as_bool) {
+        function.insert("strict".into(), Value::Bool(strict));
+    }
+    chat_tools.push(json!({ "type": "function", "function": function }));
+    Ok(())
+}
+
+fn register_tool_mapping(
+    tool_map: &mut BTreeMap<String, ToolMapping>,
+    reserved_plain_names: &BTreeSet<String>,
+    kind: ToolKind,
+    name: &str,
+    namespace: Option<&str>,
+) -> BridgeResult<String> {
+    let mapping = ToolMapping {
+        kind,
+        name: name.into(),
+        namespace: namespace.map(str::to_owned),
+    };
+    if tool_map
+        .values()
+        .any(|existing| existing.name == mapping.name && existing.namespace == mapping.namespace)
+    {
+        return Err(BridgeError::new(format!(
+            "Duplicate Responses tool identity: {}{name}.",
+            namespace
+                .map(|namespace| format!("{namespace}/"))
+                .unwrap_or_default()
+        ))
+        .param("tools"));
+    }
+    if namespace.is_none() {
+        if tool_map.contains_key(name) {
+            return Err(
+                BridgeError::new(format!("Duplicate Responses tool name: {name}.")).param("tools"),
+            );
+        }
+        tool_map.insert(name.into(), mapping);
+        return Ok(name.into());
+    }
+
+    let namespace = namespace.expect("checked above");
+    for salt in 0_u32.. {
+        let upstream_name = namespaced_upstream_name(namespace, name, salt);
+        if !tool_map.contains_key(&upstream_name) && !reserved_plain_names.contains(&upstream_name)
+        {
+            tool_map.insert(upstream_name.clone(), mapping);
+            return Ok(upstream_name);
+        }
+    }
+    unreachable!("u32 tool-name salt space exhausted")
+}
+
+fn namespaced_upstream_name(namespace: &str, name: &str, salt: u32) -> String {
+    let namespace_hint = sanitize_tool_name_component(namespace);
+    let name_hint = sanitize_tool_name_component(name);
+    let mut hint = format!("ns_{namespace_hint}_{name_hint}");
+    let digest = hash(&format!("{namespace}\0{name}\0{salt}"));
+    let suffix = &digest[..12];
+    let max_hint_len = UPSTREAM_TOOL_NAME_LIMIT - suffix.len() - 1;
+    hint.truncate(max_hint_len);
+    format!("{hint}_{suffix}")
+}
+
+fn sanitize_tool_name_component(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '_' | '-') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "tool".into()
+    } else {
+        sanitized
+    }
+}
+
+fn namespaced_tool_description(
+    namespace: Option<&str>,
+    namespace_description: Option<&str>,
+    name: &str,
+    description: &str,
+) -> String {
+    let Some(namespace) = namespace else {
+        return description.into();
+    };
+    let mut lines = vec![format!(
+        "Codex namespaced tool: namespace `{namespace}`, tool `{name}`."
+    )];
+    if let Some(namespace_description) = namespace_description.filter(|text| !text.is_empty()) {
+        lines.push(format!("Namespace description: {namespace_description}"));
+    }
+    if !description.is_empty() {
+        lines.push(description.into());
+    }
+    lines.join("\n")
+}
+
+fn find_upstream_tool_name(
+    tool_map: &BTreeMap<String, ToolMapping>,
+    name: &str,
+    namespace: Option<&str>,
+    kind: Option<ToolKind>,
+) -> Option<String> {
+    tool_map.iter().find_map(|(upstream_name, mapping)| {
+        (mapping.name == name
+            && mapping.namespace.as_deref() == namespace
+            && kind.is_none_or(|kind| mapping.kind == kind))
+        .then(|| upstream_name.clone())
+    })
+}
+
+fn resolve_upstream_tool_name(
+    tool_map: &BTreeMap<String, ToolMapping>,
+    name: &str,
+    namespace: Option<&str>,
+    kind: Option<ToolKind>,
+) -> String {
+    find_upstream_tool_name(tool_map, name, namespace, kind).unwrap_or_else(|| {
+        namespace
+            .map(|namespace| namespaced_upstream_name(namespace, name, 0))
+            .unwrap_or_else(|| name.into())
+    })
+}
+
 fn translate_tool_choice(
     choice: Option<&Value>,
-    tool_map: &BTreeMap<String, ToolKind>,
+    tool_map: &BTreeMap<String, ToolMapping>,
 ) -> BridgeResult<Option<Value>> {
     let Some(choice) = choice.filter(|value| !value.is_null()) else {
         return Ok(None);
@@ -584,15 +816,32 @@ fn translate_tool_choice(
             .or_else(|| object.get("function").and_then(|value| value.get("name")))
             .and_then(non_empty_string);
         if let Some(name) = name {
-            if !tool_map.is_empty() && !tool_map.contains_key(name) {
+            let namespace = object
+                .get("namespace")
+                .or_else(|| {
+                    object
+                        .get("function")
+                        .and_then(|value| value.get("namespace"))
+                })
+                .and_then(non_empty_string);
+            let upstream_name = find_upstream_tool_name(tool_map, name, namespace, None);
+            if !tool_map.is_empty() && upstream_name.is_none() {
                 return Err(BridgeError::new(format!(
-                    "tool_choice refers to an unknown tool: {name}."
+                    "tool_choice refers to an unknown tool: {}{name}.",
+                    namespace
+                        .map(|namespace| format!("{namespace}/"))
+                        .unwrap_or_default()
                 ))
                 .param("tool_choice"));
             }
+            let upstream_name = upstream_name.unwrap_or_else(|| {
+                namespace
+                    .map(|namespace| namespaced_upstream_name(namespace, name, 0))
+                    .unwrap_or_else(|| name.into())
+            });
             return Ok(Some(json!({
                 "type": "function",
-                "function": { "name": name }
+                "function": { "name": upstream_name }
             })));
         }
     }
@@ -767,13 +1016,20 @@ fn make_completed_message(text: &str, id: Option<String>) -> Value {
     })
 }
 
-fn make_completed_tool_call(tool_call: &Value, tool_map: &BTreeMap<String, ToolKind>) -> Value {
-    let name = tool_call
+fn make_completed_tool_call(tool_call: &Value, tool_map: &BTreeMap<String, ToolMapping>) -> Value {
+    let upstream_name = tool_call
         .get("function")
         .and_then(|value| value.get("name"))
         .and_then(Value::as_str)
         .unwrap_or("");
-    let kind = tool_map.get(name).copied().unwrap_or(ToolKind::Function);
+    let mapping = tool_map.get(upstream_name);
+    let kind = mapping
+        .map(|mapping| mapping.kind)
+        .unwrap_or(ToolKind::Function);
+    let name = mapping
+        .map(|mapping| mapping.name.as_str())
+        .unwrap_or(upstream_name);
+    let namespace = mapping.and_then(|mapping| mapping.namespace.as_deref());
     let call_id = tool_call
         .get("id")
         .and_then(non_empty_string)
@@ -784,7 +1040,7 @@ fn make_completed_tool_call(tool_call: &Value, tool_map: &BTreeMap<String, ToolK
         .and_then(|value| value.get("arguments"))
         .and_then(Value::as_str)
         .unwrap_or("{}");
-    match kind {
+    let mut item = match kind {
         ToolKind::Custom => json!({
             "id": make_id("ctc"),
             "type": "custom_tool_call",
@@ -801,7 +1057,13 @@ fn make_completed_tool_call(tool_call: &Value, tool_map: &BTreeMap<String, ToolK
             "name": name,
             "arguments": arguments,
         }),
+    };
+    if let Some(namespace) = namespace {
+        item.as_object_mut()
+            .expect("tool call item is an object")
+            .insert("namespace".into(), Value::String(namespace.into()));
     }
+    item
 }
 
 fn make_response_object(
@@ -910,7 +1172,9 @@ struct ToolState {
     output_index: usize,
     item_id: String,
     call_id: String,
+    upstream_name: String,
     name: String,
+    namespace: Option<String>,
     arguments: String,
     kind: ToolKind,
     added: bool,
@@ -1063,7 +1327,12 @@ impl StreamTranslator {
                         .tool_calls
                         .get_mut(&chat_index)
                         .expect("tool state exists");
-                    if !state.added && !state.name.is_empty() {
+                    if !state.added
+                        && upstream_tool_name_is_complete(
+                            &self.context.tool_map,
+                            &state.upstream_name,
+                        )
+                    {
                         state.added = true;
                         added_event = Some((state.output_index, tool_in_progress_item(state)));
                     }
@@ -1263,18 +1532,20 @@ impl StreamTranslator {
 
     fn ensure_tool_state(&mut self, chat_index: i64, delta: &Value) {
         if !self.tool_calls.contains_key(&chat_index) {
-            let name = delta
+            let upstream_name = delta
                 .get("function")
                 .and_then(|value| value.get("name"))
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_owned();
-            let kind = self
-                .context
-                .tool_map
-                .get(&name)
-                .copied()
+            let mapping = self.context.tool_map.get(&upstream_name);
+            let kind = mapping
+                .map(|mapping| mapping.kind)
                 .unwrap_or(ToolKind::Function);
+            let name = mapping
+                .map(|mapping| mapping.name.clone())
+                .unwrap_or_else(|| upstream_name.clone());
+            let namespace = mapping.and_then(|mapping| mapping.namespace.clone());
             let output_index = self.allocate_output();
             self.tool_calls.insert(
                 chat_index,
@@ -1290,7 +1561,9 @@ impl StreamTranslator {
                         .and_then(non_empty_string)
                         .map(ToOwned::to_owned)
                         .unwrap_or_else(|| make_id("call")),
+                    upstream_name,
                     name,
+                    namespace,
                     arguments: String::new(),
                     kind,
                     added: false,
@@ -1307,9 +1580,21 @@ impl StreamTranslator {
             .and_then(|value| value.get("name"))
             .and_then(Value::as_str)
         {
-            state.name.push_str(name);
-            if let Some(kind) = self.context.tool_map.get(&state.name) {
-                state.kind = *kind;
+            state.upstream_name.push_str(name);
+            if let Some(mapping) = self.context.tool_map.get(&state.upstream_name) {
+                if !state.added && state.kind != mapping.kind {
+                    state.item_id = make_id(if mapping.kind == ToolKind::Custom {
+                        "ctc"
+                    } else {
+                        "fc"
+                    });
+                }
+                state.kind = mapping.kind;
+                state.name = mapping.name.clone();
+                state.namespace = mapping.namespace.clone();
+            } else {
+                state.name = state.upstream_name.clone();
+                state.namespace = None;
             }
         }
     }
@@ -1346,7 +1631,7 @@ impl StreamTranslator {
 }
 
 fn tool_in_progress_item(state: &ToolState) -> Value {
-    match state.kind {
+    let mut item = match state.kind {
         ToolKind::Custom => json!({
             "id": state.item_id,
             "type": "custom_tool_call",
@@ -1363,11 +1648,17 @@ fn tool_in_progress_item(state: &ToolState) -> Value {
             "name": state.name,
             "arguments": "",
         }),
+    };
+    if let Some(namespace) = &state.namespace {
+        item.as_object_mut()
+            .expect("tool call item is an object")
+            .insert("namespace".into(), Value::String(namespace.clone()));
     }
+    item
 }
 
 fn completed_tool_state_item(state: &ToolState) -> Value {
-    match state.kind {
+    let mut item = match state.kind {
         ToolKind::Custom => json!({
             "id": state.item_id,
             "type": "custom_tool_call",
@@ -1384,7 +1675,29 @@ fn completed_tool_state_item(state: &ToolState) -> Value {
             "name": state.name,
             "arguments": if state.arguments.is_empty() { "{}" } else { &state.arguments },
         }),
+    };
+    if let Some(namespace) = &state.namespace {
+        item.as_object_mut()
+            .expect("tool call item is an object")
+            .insert("namespace".into(), Value::String(namespace.clone()));
     }
+    item
+}
+
+fn upstream_tool_name_is_complete(
+    tool_map: &BTreeMap<String, ToolMapping>,
+    upstream_name: &str,
+) -> bool {
+    if upstream_name.is_empty() {
+        return false;
+    }
+    if tool_map.is_empty() {
+        return true;
+    }
+    tool_map.contains_key(upstream_name)
+        && !tool_map.keys().any(|candidate| {
+            candidate.len() > upstream_name.len() && candidate.starts_with(upstream_name)
+        })
 }
 
 fn coerce_instruction_text(value: &Value) -> BridgeResult<String> {
@@ -1549,7 +1862,10 @@ mod tests {
         assert_eq!(translated.body["reasoning_effort"], "max");
         assert_eq!(translated.body["max_completion_tokens"], 4096);
         assert!(translated.body.get("parallel_tool_calls").is_none());
-        assert_eq!(translated.context.tool_map["apply_patch"], ToolKind::Custom);
+        assert_eq!(
+            translated.context.tool_map["apply_patch"].kind,
+            ToolKind::Custom
+        );
         assert!(
             translated.body["prompt_cache_key"]
                 .as_str()
@@ -1712,5 +2028,279 @@ mod tests {
             "*** Begin Patch"
         );
         assert_eq!(store.get("call_read").as_deref(), Some("reason continued"));
+    }
+
+    #[test]
+    fn round_trips_namespaced_collaboration_tools() {
+        let translated = translate_responses_request(
+            json!({
+                "model": "k3",
+                "input": [
+                    { "role": "user", "content": "Create a child agent." },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_spawn_previous",
+                        "namespace": "collaboration",
+                        "name": "spawn_agent",
+                        "arguments": "{\"task\":\"inspect\"}"
+                    },
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_spawn_previous",
+                        "output": "child-ready"
+                    },
+                    {
+                        "type": "custom_tool_call",
+                        "call_id": "call_note_previous",
+                        "namespace": "collaboration",
+                        "name": "handoff_note",
+                        "input": "continue recursively"
+                    },
+                    {
+                        "type": "custom_tool_call_output",
+                        "call_id": "call_note_previous",
+                        "output": "accepted"
+                    }
+                ],
+                "tools": [{
+                    "type": "namespace",
+                    "name": "collaboration",
+                    "description": "Create and coordinate descendant agents.",
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": "spawn_agent",
+                            "description": "Create a child agent.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": { "task": { "type": "string" } },
+                                "required": ["task"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "type": "custom",
+                            "name": "handoff_note",
+                            "description": "Send a free-form handoff note."
+                        }
+                    ]
+                }],
+                "tool_choice": {
+                    "type": "function",
+                    "namespace": "collaboration",
+                    "name": "spawn_agent"
+                },
+                "stream": false
+            }),
+            "k3",
+            None,
+        )
+        .unwrap();
+
+        let spawn_name = find_upstream_tool_name(
+            &translated.context.tool_map,
+            "spawn_agent",
+            Some("collaboration"),
+            Some(ToolKind::Function),
+        )
+        .unwrap();
+        let note_name = find_upstream_tool_name(
+            &translated.context.tool_map,
+            "handoff_note",
+            Some("collaboration"),
+            Some(ToolKind::Custom),
+        )
+        .unwrap();
+        assert!(spawn_name.len() <= UPSTREAM_TOOL_NAME_LIMIT);
+        assert!(note_name.len() <= UPSTREAM_TOOL_NAME_LIMIT);
+        assert_eq!(
+            translated.body["messages"][1]["tool_calls"][0]["function"]["name"],
+            spawn_name
+        );
+        assert_eq!(
+            translated.body["messages"][3]["tool_calls"][0]["function"]["name"],
+            note_name
+        );
+        assert_eq!(
+            translated.body["tool_choice"]["function"]["name"],
+            spawn_name
+        );
+
+        let response = translate_chat_completion(
+            &json!({
+                "id": "chatcmpl_namespace",
+                "model": "k3",
+                "choices": [{
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": "call_spawn",
+                                "type": "function",
+                                "function": {
+                                    "name": spawn_name,
+                                    "arguments": "{\"task\":\"grandchild\"}"
+                                }
+                            },
+                            {
+                                "id": "call_note",
+                                "type": "function",
+                                "function": {
+                                    "name": note_name,
+                                    "arguments": "{\"input\":\"handoff\"}"
+                                }
+                            }
+                        ]
+                    }
+                }]
+            }),
+            &translated.context,
+        )
+        .unwrap();
+        assert_eq!(response["output"][0]["type"], "function_call");
+        assert_eq!(response["output"][0]["namespace"], "collaboration");
+        assert_eq!(response["output"][0]["name"], "spawn_agent");
+        assert_eq!(response["output"][1]["type"], "custom_tool_call");
+        assert_eq!(response["output"][1]["namespace"], "collaboration");
+        assert_eq!(response["output"][1]["name"], "handoff_note");
+        assert_eq!(response["output"][1]["input"], "handoff");
+    }
+
+    #[test]
+    fn streams_split_namespaced_tool_name_after_it_is_routable() {
+        let translated = translate_responses_request(
+            json!({
+                "model": "k3",
+                "input": "Create a descendant agent.",
+                "tools": [{
+                    "type": "namespace",
+                    "name": "collaboration",
+                    "description": "Coordinate agents.",
+                    "tools": [{
+                        "type": "function",
+                        "name": "spawn_agent",
+                        "parameters": { "type": "object" }
+                    }]
+                }],
+                "stream": true
+            }),
+            "k3",
+            None,
+        )
+        .unwrap();
+        let upstream_name = translated.body["tools"][0]["function"]["name"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let split_at = upstream_name.len() / 2;
+        let first = &upstream_name[..split_at];
+        let second = &upstream_name[split_at..];
+        let mut stream = StreamTranslator::new(translated.context);
+        let mut events = stream
+            .ingest(&json!({
+                "id": "chatcmpl_split_namespace",
+                "model": "k3",
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "id": "call_spawn",
+                            "type": "function",
+                            "function": { "name": first, "arguments": "" }
+                        }]
+                    },
+                    "finish_reason": null
+                }]
+            }))
+            .unwrap();
+        assert!(
+            !events
+                .iter()
+                .any(|event| { event["type"] == "response.output_item.added" })
+        );
+        events.extend(
+            stream
+                .ingest(&json!({
+                    "id": "chatcmpl_split_namespace",
+                    "model": "k3",
+                    "choices": [{
+                        "delta": {
+                            "tool_calls": [{
+                                "index": 0,
+                                "function": {
+                                    "name": second,
+                                    "arguments": "{\"task\":\"grandchild\"}"
+                                }
+                            }]
+                        },
+                        "finish_reason": "tool_calls"
+                    }]
+                }))
+                .unwrap(),
+        );
+        events.extend(stream.finish());
+        let added = events
+            .iter()
+            .find(|event| event["type"] == "response.output_item.added")
+            .unwrap();
+        assert_eq!(added["item"]["name"], "spawn_agent");
+        assert_eq!(added["item"]["namespace"], "collaboration");
+        let completed = events.last().unwrap();
+        assert_eq!(completed["response"]["output"][0]["name"], "spawn_agent");
+        assert_eq!(
+            completed["response"]["output"][0]["namespace"],
+            "collaboration"
+        );
+    }
+
+    #[test]
+    fn keeps_namespaced_upstream_names_short_and_collision_safe() {
+        let namespace = format!("collaboration-{}", "n".repeat(100));
+        let tool_name = format!("spawn-{}", "t".repeat(100));
+        let namespace_tool = json!({
+            "type": "namespace",
+            "name": namespace,
+            "description": "Long namespace.",
+            "tools": [{
+                "type": "function",
+                "name": tool_name,
+                "parameters": { "type": "object" }
+            }]
+        });
+        let baseline = translate_responses_request(
+            json!({ "input": "test", "tools": [namespace_tool.clone()], "stream": false }),
+            "k3",
+            None,
+        )
+        .unwrap();
+        let first_name = baseline.body["tools"][0]["function"]["name"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_eq!(first_name.len(), UPSTREAM_TOOL_NAME_LIMIT);
+
+        let collided = translate_responses_request(
+            json!({
+                "input": "test",
+                "tools": [
+                    namespace_tool,
+                    { "type": "function", "name": first_name, "parameters": { "type": "object" } }
+                ],
+                "stream": false
+            }),
+            "k3",
+            None,
+        )
+        .unwrap();
+        let second_name = collided.body["tools"][0]["function"]["name"]
+            .as_str()
+            .unwrap();
+        assert_ne!(second_name, first_name);
+        assert!(second_name.len() <= UPSTREAM_TOOL_NAME_LIMIT);
+        assert_eq!(
+            collided.context.tool_map[second_name].namespace.as_deref(),
+            Some(namespace.as_str())
+        );
     }
 }

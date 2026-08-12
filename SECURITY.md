@@ -26,7 +26,7 @@ Kimi requires `reasoning_content` across multi-step tool calls. The bridge keeps
 
 ## Release artifacts
 
-Release downloads include SHA-256 checksums. The `0.2.0-alpha.2` macOS binaries are not Apple-notarized; verify the checksum before bypassing a Gatekeeper warning. The universal installation kit contains the same Rust binary for Apple Silicon and Intel Macs.
+Release downloads include SHA-256 checksums. The `0.3.0` macOS binaries are not Apple-notarized; verify the checksum before bypassing a Gatekeeper warning. The universal installation kit contains the same Rust binary for Apple Silicon and Intel Macs.
 
 ## Reporting
 

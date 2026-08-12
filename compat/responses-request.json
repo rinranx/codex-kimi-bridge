@@ -31,6 +31,30 @@
       "type": "function_call_output",
       "call_id": "call_previous",
       "output": "contents"
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_spawn_previous",
+      "namespace": "collaboration",
+      "name": "spawn_agent",
+      "arguments": "{\"task\":\"inspect the frontend\"}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_spawn_previous",
+      "output": "child-ready"
+    },
+    {
+      "type": "custom_tool_call",
+      "call_id": "call_handoff_previous",
+      "namespace": "collaboration",
+      "name": "handoff_note",
+      "input": "continue with a descendant agent"
+    },
+    {
+      "type": "custom_tool_call_output",
+      "call_id": "call_handoff_previous",
+      "output": "accepted"
     }
   ],
   "tools": [
@@ -56,9 +80,43 @@
       "type": "custom",
       "name": "apply_patch",
       "description": "Apply an exact patch"
+    },
+    {
+      "type": "namespace",
+      "name": "collaboration",
+      "description": "Create and coordinate descendant agents.",
+      "tools": [
+        {
+          "type": "function",
+          "name": "spawn_agent",
+          "description": "Create a child agent.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "task": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "task"
+            ],
+            "additionalProperties": false
+          },
+          "strict": true
+        },
+        {
+          "type": "custom",
+          "name": "handoff_note",
+          "description": "Send a free-form handoff note."
+        }
+      ]
     }
   ],
-  "tool_choice": "auto",
+  "tool_choice": {
+    "type": "function",
+    "namespace": "collaboration",
+    "name": "spawn_agent"
+  },
   "reasoning": {
     "effort": "xhigh"
   },

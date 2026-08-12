@@ -72,7 +72,7 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           [[ "$tag" == "v$version" ]]
           [[ "$manifest" == "release-manifests/$tag.json" ]]
-          [[ "$prerelease" == "true" ]]
+          [[ "$prerelease" == "true" || "$prerelease" == "false" ]]
           [[ "$target_commit" =~ ^[0-9a-f]{40}$ ]]
           [[ "$retry_failed_draft" == "true" || "$retry_failed_draft" == "false" ]]
           [[ -s "$notes" ]]
@@ -87,6 +87,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "target_commit=$target_commit" >> "$GITHUB_OUTPUT"
           echo "retry_failed_draft=$retry_failed_draft" >> "$GITHUB_OUTPUT"
 
@@ -157,12 +158,13 @@ jobs:
             git push origin "refs/tags/$tag"
           fi
 
-      - name: Create a draft prerelease and upload assets once
+      - name: Create a draft release and upload assets once
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_TITLE: ${{ steps.release.outputs.title }}
           RELEASE_NOTES: ${{ steps.release.outputs.notes }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
           RETRY_FAILED_DRAFT: ${{ steps.release.outputs.retry_failed_draft }}
         run: |
           set -euo pipefail
@@ -199,13 +201,14 @@ jobs:
             --notes-file "$RELEASE_NOTES" \
             --verify-tag \
             --draft \
-            --prerelease \
+            --prerelease="$RELEASE_PRERELEASE" \
             --latest=false
 
       - name: Verify every draft asset digest and size
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
@@ -218,7 +221,7 @@ jobs:
             release_json="$(jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' <<< "$releases_json" | head -n 1)"
             if [[ -n "$release_json" ]] \
               && [[ "$(jq -r '.draft' <<< "$release_json")" == "true" ]] \
-              && [[ "$(jq -r '.prerelease' <<< "$release_json")" == "true" ]] \
+              && [[ "$(jq -r '.prerelease' <<< "$release_json")" == "$RELEASE_PRERELEASE" ]] \
               && [[ "$(jq '.assets | length' <<< "$release_json")" == "6" ]] \
               && [[ "$(jq '[.assets[] | (.state == "uploaded" and (((.digest // "") | startswith("sha256:"))))] | all' <<< "$release_json")" == "true" ]]; then
               break
@@ -227,7 +230,7 @@ jobs:
           done
           [[ -n "$release_json" ]]
           [[ "$(jq -r '.draft' <<< "$release_json")" == "true" ]]
-          [[ "$(jq -r '.prerelease' <<< "$release_json")" == "true" ]]
+          [[ "$(jq -r '.prerelease' <<< "$release_json")" == "$RELEASE_PRERELEASE" ]]
           assets_json="$(jq -c '.assets // []' <<< "$release_json")"
 
           local_count="$(find "$RUNNER_TEMP/release-assets" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
@@ -250,10 +253,13 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
-          gh release edit "$tag" --draft=false --prerelease --latest=false
+          latest="false"
+          [[ "$RELEASE_PRERELEASE" == "false" ]] && latest="true"
+          gh release edit "$tag" --draft=false --prerelease="$RELEASE_PRERELEASE" --latest="$latest"
 
           immutable="false"
           for attempt in {1..15}; do
@@ -262,6 +268,7 @@ jobs:
               continue
             fi
             [[ "$(jq -r '.draft' <<< "$release_json")" == "false" ]]
+            [[ "$(jq -r '.prerelease' <<< "$release_json")" == "$RELEASE_PRERELEASE" ]]
             immutable="$(jq -r '.immutable // false' <<< "$release_json")"
             [[ "$immutable" == "true" ]] && break
             sleep 2
