@@ -12,8 +12,8 @@ Before the first release, enable **Release immutability** in the repository's Se
 2. Update the Rust crate, installer checks, tests, documentation, and fixed download links to that version.
 3. Add a new `release-manifests/v<version>.json` and matching `.md` release-notes file.
 4. Push the source commit to `main` only after local tests pass and Release immutability is enabled.
-5. The `Publish immutable release` workflow tests both implementations, builds both macOS architectures, creates checksums, creates an annotated tag, uploads assets to a draft prerelease, downloads and byte-checks every draft asset, and only then publishes it.
-6. Confirm that the workflow reports the published Release as immutable and that every asset digest and size matches the local build output.
+5. The `Publish immutable release` workflow tests both implementations, builds both macOS architectures, creates checksums, creates an annotated tag, uploads assets to a draft prerelease, and compares every server-reported asset digest and size with the local build before publishing.
+6. After GitHub reports the published Release as immutable, the workflow downloads every public asset, compares it byte-for-byte with the local build, and rechecks `SHA256SUMS.txt`.
 
 The workflow never uses `--clobber`. If a released artifact is wrong, increment the version and publish another Release. Do not move a tag, delete an asset, or replace a filename attached to an existing version.
 

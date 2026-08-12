@@ -45,7 +45,7 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             manifest="$INPUT_MANIFEST"
           else
-            manifest="$(git diff-tree --no-commit-id --name-only --diff-filter=A -r "$GITHUB_SHA" | grep -E '^release-manifests/v[^/]+\.json$' || true)"
+            manifest="$(git diff-tree --no-commit-id --name-only --diff-filter=AM -r "$GITHUB_SHA" | grep -E '^release-manifests/v[^/]+\.json$' || true)"
             count="$(printf '%s\n' "$manifest" | sed '/^$/d' | wc -l | tr -d ' ')"
             if [[ "$count" != "1" ]]; then
               echo "A release commit must add exactly one JSON manifest; found $count." >&2
@@ -63,12 +63,18 @@ jobs:
           tag="$(jq -er '.tag' "$manifest")"
           title="$(jq -er '.title' "$manifest")"
           prerelease="$(jq -er '.prerelease' "$manifest")"
+          target_commit="$(jq -r '.target_commit // empty' "$manifest")"
+          retry_failed_draft="$(jq -r '.retry_failed_draft // false' "$manifest")"
           notes="${manifest%.json}.md"
+
+          [[ -n "$target_commit" ]] || target_commit="$GITHUB_SHA"
 
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           [[ "$tag" == "v$version" ]]
           [[ "$manifest" == "release-manifests/$tag.json" ]]
           [[ "$prerelease" == "true" ]]
+          [[ "$target_commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$retry_failed_draft" == "true" || "$retry_failed_draft" == "false" ]]
           [[ -s "$notes" ]]
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
           [[ -z "$(git status --porcelain)" ]]
@@ -81,6 +87,21 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
+          echo "target_commit=$target_commit" >> "$GITHUB_OUTPUT"
+          echo "retry_failed_draft=$retry_failed_draft" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact tagged source
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ steps.release.outputs.target_commit }}
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "$RELEASE_COMMIT" ]]; then
+            git fetch origin "$RELEASE_COMMIT"
+            git checkout --detach "$RELEASE_COMMIT"
+          fi
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_COMMIT" ]]
+          [[ -z "$(git status --porcelain)" ]]
 
       - name: Install the pinned Rust toolchain
         shell: bash
@@ -119,19 +140,20 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.target_commit }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
           if git show-ref --verify --quiet "refs/tags/$tag"; then
             tagged_commit="$(git rev-list -n 1 "$tag")"
-            [[ "$tagged_commit" == "$GITHUB_SHA" ]] || {
+            [[ "$tagged_commit" == "$RELEASE_COMMIT" ]] || {
               echo "Tag $tag already points to a different commit." >&2
               exit 1
             }
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$tag" "$GITHUB_SHA" -m "codex-kimi-bridge $RELEASE_VERSION"
+            git tag -a "$tag" "$RELEASE_COMMIT" -m "codex-kimi-bridge $RELEASE_VERSION"
             git push origin "refs/tags/$tag"
           fi
 
@@ -141,13 +163,22 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_TITLE: ${{ steps.release.outputs.title }}
           RELEASE_NOTES: ${{ steps.release.outputs.notes }}
+          RETRY_FAILED_DRAFT: ${{ steps.release.outputs.retry_failed_draft }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
-          existing_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -r --arg tag "$tag" '.[] | select(.tag_name == $tag) | .id' | head -n 1)"
-          if [[ -n "$existing_id" ]]; then
-            echo "A GitHub Release already exists for $tag; refusing to overwrite it." >&2
-            exit 1
+          existing_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
+          if [[ -n "$existing_json" ]]; then
+            if [[ "$RETRY_FAILED_DRAFT" != "true" || "$(jq -r '.draft' <<< "$existing_json")" != "true" ]]; then
+              echo "A GitHub Release already exists for $tag; refusing to overwrite it." >&2
+              exit 1
+            fi
+            existing_id="$(jq -r '.id' <<< "$existing_json")"
+            existing_assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/$existing_id/assets?per_page=100")"
+            [[ "$(jq 'length' <<< "$existing_assets")" == "6" ]]
+            [[ "$(jq '[.[].state == "uploaded"] | all' <<< "$existing_assets")" == "true" ]]
+            gh release delete "$tag" --yes
+            [[ -z "$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -r --arg tag "$tag" '.[] | select(.tag_name == $tag) | .id' | head -n 1)" ]]
           fi
 
           gh release create "$tag" "$RUNNER_TEMP"/release-assets/* \
@@ -158,7 +189,7 @@ jobs:
             --prerelease \
             --latest=false
 
-      - name: Download and byte-verify every draft asset
+      - name: Verify every draft asset digest and size
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -176,7 +207,6 @@ jobs:
           remote_count="$(jq 'length' <<< "$assets_json")"
           [[ "$local_count" == "6" && "$remote_count" == "$local_count" ]]
 
-          verify_dir="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
           for local_asset in "$RUNNER_TEMP"/release-assets/*; do
             name="$(basename "$local_asset")"
             local_size="$(stat -f '%z' "$local_asset")"
@@ -185,17 +215,11 @@ jobs:
             [[ "$matches" == "1" ]]
             remote_size="$(jq -r --arg name "$name" '.[] | select(.name == $name) | .size' <<< "$assets_json")"
             remote_digest="$(jq -r --arg name "$name" '.[] | select(.name == $name) | .digest // empty' <<< "$assets_json")"
-            asset_id="$(jq -r --arg name "$name" '.[] | select(.name == $name) | .id' <<< "$assets_json")"
             [[ "$remote_size" == "$local_size" ]]
             [[ "$remote_digest" == "$local_digest" ]]
-            gh api \
-              -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$verify_dir/$name"
-            cmp "$local_asset" "$verify_dir/$name"
           done
-          (cd "$verify_dir" && shasum -a 256 -c SHA256SUMS.txt)
 
-      - name: Publish only after verification
+      - name: Publish and require GitHub immutability
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -218,3 +242,23 @@ jobs:
           fi
 
           echo "Published immutable release: $(jq -r '.html_url' <<< "$release_json")"
+
+      - name: Download and byte-verify the immutable release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          verify_dir="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
+          gh release download "$RELEASE_TAG" --dir "$verify_dir"
+
+          local_count="$(find "$RUNNER_TEMP/release-assets" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          downloaded_count="$(find "$verify_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          [[ "$local_count" == "6" && "$downloaded_count" == "$local_count" ]]
+
+          for local_asset in "$RUNNER_TEMP"/release-assets/*; do
+            name="$(basename "$local_asset")"
+            [[ -f "$verify_dir/$name" ]]
+            cmp "$local_asset" "$verify_dir/$name"
+          done
+          (cd "$verify_dir" && shasum -a 256 -c SHA256SUMS.txt)
