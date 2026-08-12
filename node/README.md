@@ -8,7 +8,7 @@
 
 - npm 包名：`codex-kimi-bridge-node`
 - 命令：`codex-kimi-bridge-node`
-- 版本：`0.2.0`
+- 源码版本：`0.3.0`（与尚未发布的 Rust `0.4.0` 候选版共享 `CKB1` 本机签名交接格式）
 - 默认地址仍为 `127.0.0.1:8787`
 - Keychain 项目仍为 `codex-kimi-code-api-key`
 
@@ -35,7 +35,7 @@ codex-kimi-bridge-node serve
 
 安装回退版不会修改 `~/.codex/config.toml`。由于本地地址和 Responses 协议保持不变，原有 provider 与 `kimi_frontend` 配置可以继续使用。
 
-也可以在项目根目录安装已打包的回退文件：
+当前已发布的回退包仍是 `0.2.0`；若要测试 `0.3.0` 的签名 Hook 交接与 Desktop 消息 `phase`，请直接从本目录安装源码。也可以在项目根目录安装当前已发布的回退文件：
 
 ```sh
 npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-node-0.2.0.tgz
@@ -44,6 +44,8 @@ npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/downl
 ## 功能
 
 - Responses 文本、图片和视频输入转换
+- Codex Desktop `agent_message` 转换；过滤不可解密的 Provider 状态、验签 `CKB1` 本机任务信封，并为助手消息补齐 `commentary` / `final_answer` phase
+- `hook user-prompt-submit` 与 `hook pre-tool-use` 命令，可与 Rust 默认版创建的同一私有缓存和签名密钥互操作
 - 非流式与 SSE 流式输出
 - 顶层及 `namespace` 内的 function 与 custom tools
 - 多轮工具调用所需的 Kimi `reasoning_content` 保留

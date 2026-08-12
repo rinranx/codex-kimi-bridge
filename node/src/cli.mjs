@@ -3,6 +3,12 @@ import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { BridgeError, toErrorEnvelope } from "./errors.mjs";
+import {
+  captureUserPrompt,
+  defaultHandoffStateDir,
+  loadHandoffVerifierIfPresent,
+  rewritePreToolUse,
+} from "./handoff.mjs";
 import { translateResponsesRequest } from "./protocol.mjs";
 import {
   createBridgeServer,
@@ -44,6 +50,9 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo()) {
     if (command === "doctor") {
       return await doctorCommand(flags, io, json);
     }
+    if (command === "hook") {
+      return await hookCommand(flags, positionals, io);
+    }
     if (command === "translate-request") {
       return await translateRequestCommand(flags, positionals, io, json);
     }
@@ -84,6 +93,7 @@ async function serveCommand(flags, io) {
     allowNonLoopback: flags["allow-non-loopback"] === true,
     allowInsecureUpstream: flags["allow-insecure-upstream"] === true,
     logger,
+    handoffStateDir: stringFlag(flags["handoff-state-dir"], defaultHandoffStateDir()),
   });
   const address = await listen(server, { host, port });
   if (!quiet) {
@@ -212,8 +222,13 @@ async function doctorCommand(flags, io, json) {
 
 async function translateRequestCommand(flags, positionals, io, json) {
   const source = await readJsonInput(flags, positionals, io);
+  const handoffStateDir = stringFlag(
+    flags["handoff-state-dir"],
+    defaultHandoffStateDir(),
+  );
   const translated = translateResponsesRequest(source, {
     defaultModel: stringFlag(flags.model, "k3"),
+    handoffVerifier: loadHandoffVerifierIfPresent(handoffStateDir),
   });
   const result = {
     ok: true,
@@ -224,6 +239,41 @@ async function translateRequestCommand(flags, positionals, io, json) {
   };
   io.stdout.write(`${JSON.stringify(json ? result : result.request, null, 2)}\n`);
   return 0;
+}
+
+async function hookCommand(flags, positionals, io) {
+  const action = positionals[0];
+  if (!action) {
+    throw new BridgeError(
+      "A hook action is required: user-prompt-submit or pre-tool-use.",
+      { code: "missing_hook_action" },
+    );
+  }
+  const stateDir = stringFlag(flags["state-dir"], defaultHandoffStateDir());
+  let input;
+  try {
+    input = JSON.parse(await readAll(io.stdin));
+  } catch (error) {
+    throw new BridgeError("Hook input must be valid JSON.", {
+      code: "invalid_json",
+      cause: error,
+    });
+  }
+  if (action === "user-prompt-submit") {
+    captureUserPrompt(input, stateDir);
+    return 0;
+  }
+  if (action === "pre-tool-use") {
+    const output = rewritePreToolUse(input, stateDir);
+    if (output !== null) {
+      io.stdout.write(`${JSON.stringify(output)}\n`);
+    }
+    return 0;
+  }
+  throw new BridgeError(
+    `Unknown hook action: ${action}. Use user-prompt-submit or pre-tool-use.`,
+    { code: "unknown_hook_action" },
+  );
 }
 
 async function requestCommand(flags, positionals, io, json) {
@@ -419,12 +469,14 @@ Zero-dependency local bridge: Codex Responses API -> Kimi Code Chat Completions.
 Usage:
   codex-kimi-bridge-node serve [options]
   codex-kimi-bridge-node doctor [--json] [--live]
+  codex-kimi-bridge-node hook <user-prompt-submit|pre-tool-use>
   codex-kimi-bridge-node translate-request [--file request.json | -] [--json]
   codex-kimi-bridge-node request [text] [--stream] [--json]
 
 Commands:
   serve              Listen for Codex on 127.0.0.1:8787.
   doctor             Check Node, bind port, privacy defaults, auth source, and config.
+  hook               Trusted local Codex task-handoff hook entry point.
   translate-request  Offline conversion of a Responses request to Kimi Chat JSON.
   request             Explicit raw test request to a running bridge.
   version             Print the bridge version.
@@ -443,6 +495,12 @@ Serve options:
 Doctor options:
   --live                        Make one small Kimi request; consumes a tiny amount of quota.
   --json                        Stable machine-readable output.
+
+Hook options:
+  --state-dir <path>            Override the private local handoff state directory.
+
+Translate options:
+  --handoff-state-dir <path>    Verify local CKB1 handoff envelopes from this directory.
 
 Request auth precedence:
   1. KIMI_CODE_API_KEY

@@ -2,7 +2,9 @@
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.3.0`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
+本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.4.0`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
+
+> 当前稳定版为 `v0.4.0`。只从该版本的 GitHub Release 下载并核对校验文件，不要用 `main/downloads`、相似名称的软件包或旧版代替。
 
 ## 1. 准备
 
@@ -18,12 +20,12 @@
 
 推荐下载：
 
-<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-macos-install-kit-0.3.0.zip>
+<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-install-kit-0.4.0.zip>
 
-同时下载同一 Release 中的 [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/INSTALL-KIT-SHA256.txt)，然后在终端进入下载目录运行：
+同时下载同一 Release 中的 [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/INSTALL-KIT-SHA256.txt)，然后在终端进入下载目录运行：
 
 ```sh
-shasum -a 256 codex-kimi-bridge-macos-install-kit-0.3.0.zip
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.4.0.zip
 ```
 
 输出应与校验文件完全一致。本版本尚未做 Apple 公证；首次打开 `.command` 时，可能需要右键文件并选择“打开”。
@@ -66,7 +68,7 @@ $HOME/.local/bin/codex-kimi-bridge --version
 预期输出：
 
 ```text
-0.3.0
+0.4.0
 ```
 
 如果希望在任意终端直接输入命令，可把下面一行加入 `~/.zprofile`，再新开终端：
@@ -202,7 +204,25 @@ cp -R companion-skill/manage-codex-kimi-bridge "$HOME/.codex/skills/"
 
 这个 Skill 用于以后启动、诊断、切换模型和排查 8787 端口；它不是桥接程序本身。
 
-## 11. 启动与检查
+## 11. 安装并信任任务交接 Hooks
+
+运行：
+
+```sh
+$HOME/.local/bin/codex-kimi-bridge hooks install
+$HOME/.local/bin/codex-kimi-bridge hooks status --json
+```
+
+安装器只合并两条带项目标记的 Hook，保留 `~/.codex/hooks.json` 里已有的其他内容；修改现有文件前会创建时间戳备份。随后完全退出并重新打开 Codex Desktop，输入 `/hooks`，检查并信任：
+
+- `UserPromptSubmit` → `codex-kimi-bridge hook user-prompt-submit`
+- `PreToolUse`（严格匹配 `Agent`、`spawn_agent`、Multi-Agent V2 的 `collaborationspawn_agent` 或 `collaboration.spawn_agent` 兼容形式）→ `codex-kimi-bridge hook pre-tool-use`
+
+不要绕过 Hook 信任。可见任务会以权限 `0600` 暂存在 `~/Library/Caches/codex-kimi-bridge/handoff-v1`，24 小时后清理。`CKB1` 信封使用 HMAC-SHA256 验证来源、完整性、收件任务与有效期，但不提供加密保密；不要在任务里放 API Key、密码或其他秘密。
+
+要移除时运行 `codex-kimi-bridge hooks uninstall`；它只移除本项目标记的两条命令。
+
+## 12. 启动与检查
 
 安装后任选一种启动方式：
 
@@ -276,7 +296,7 @@ $HOME/.local/bin/codex-kimi-bridge doctor --json
 健康信息应包含：
 
 ```json
-{"service":"codex-kimi-bridge","implementation":"rust","version":"0.3.0"}
+{"service":"codex-kimi-bridge","implementation":"rust","version":"0.4.0"}
 ```
 
 `doctor --json` 不会联系 Kimi。只有明确愿意消耗少量额度时才运行：
@@ -285,9 +305,24 @@ $HOME/.local/bin/codex-kimi-bridge doctor --json
 $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 ```
 
-最后完全重启 Codex Desktop，在任务中要求主代理“使用 `kimi_frontend` 子代理审查这个前端”。
+最后完全重启 Codex Desktop。原生子代理任务使用下面的签名交接方式：
 
-## 12. 常见问题
+1. 用户的当前请求或最近已完成历史中必须包含完整任务；推荐用户直接发送：
+
+```text
+[KIMI_TASK]
+在这里写完整任务、输入位置、输出要求和停止条件。
+[/KIMI_TASK]
+```
+
+2. 主代理创建 `kimi_frontend` 时使用 `fork_turns = "none"`。已获信任的 `PreToolUse` Hook 会把当前标记任务签名并绑定到该子代理的 `task_name`。
+3. 让 Kimi 以普通最终答案返回，不要用 `send_message` 或 `followup_task` 跨 Provider 传正文。
+
+可以直接发送：“`[KIMI_TASK]`（这里写完整任务）`[/KIMI_TASK]`；请以 `fork_turns=none` 创建 `kimi_frontend`，等待它的普通最终答案。”
+
+若 Hook 不可用，已完成历史中的显式 `[KIMI_TASK]` 加最小正数 `fork_turns` 仍可作为兼容回退，但可靠性较低。Kimi 创建另一个 `kimi_frontend` 后代时，应在 `spawn_agent.message` 中再次使用 `[KIMI_TASK]` 标记精确任务。
+
+## 13. 常见问题
 
 - **8787 已占用**：先确认占用者，不要直接结束未知进程。旧桥窗口可按 `Control+C` 停止。Rust 和 Node 版不能同时监听 8787。
 - **仍启动 0.1.0**：运行 `command -v codex-kimi-bridge`；若指向全局 npm 位置，卸载旧包，再使用 `~/.local/bin/codex-kimi-bridge`。
@@ -295,11 +330,13 @@ $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 - **macOS 阻止打开**：先核对 SHA-256，再右键 `.command` 选择“打开”。
 - **401／missing_api_key**：检查 Keychain 服务名和 provider 的 auth 命令，不要输出 Key 本身。
 - **模型无权限**：按会员等级同时修改子代理的三项模型配置；新建任务后重试。
+- **子代理能运行但看不到 Kimi 过程消息**：确认 `0.4.0` 响应的助手消息含 `phase`，终止文本为 `final_answer`、工具过程为 `commentary`；旧版缺少该字段。不要修改 Desktop 应用本体。
+- **`missing_handoff_envelope`／Kimi 提示 Payload 为空**：确认运行版本为 `0.4.0`，运行 `hooks status --json`，并在 Desktop `/hooks` 中确认两条命令已获信任。不要转发原始密文规避验签。
 - **LaunchAgent 未启动**：运行 `launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"`，并查看 `~/Library/Logs/codex-kimi-bridge.error.log`。
 - **LaunchAgent 反复重启**：通常是 8787 被其他程序占用。先识别占用者，不要直接结束未知进程。
 - **Rust 兼容问题**：停止 Rust 版后，按 [`node/install/INSTALL-GUIDE.zh-CN.md`](../node/install/INSTALL-GUIDE.zh-CN.md) 安装不同命令名的 Node 回退版。
 
-## 13. 卸载
+## 14. 卸载
 
 如果安装过 LaunchAgent，先双击 `uninstall-launchagent.command`。然后停止其他手动桥接，把二进制移到废纸篓：
 
@@ -307,4 +344,4 @@ $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 mv "$HOME/.local/bin/codex-kimi-bridge" "$HOME/.Trash/codex-kimi-bridge"
 ```
 
-Codex provider、子代理、Skill 和 Keychain 项目是独立配置，只有确定不再使用时才分别删除。卸载 Rust 二进制不会自动删除这些内容。
+卸载二进制前可运行 `codex-kimi-bridge hooks uninstall`，只移除本项目的 Hook。Codex provider、子代理、Skill 和 Keychain 项目是独立配置，只有确定不再使用时才分别删除。卸载 Rust 二进制不会自动删除这些内容。

@@ -52,12 +52,74 @@ test("bridges a non-streaming request without logging the body or token", async 
 
   assert.equal(response.statusCode, 200);
   assert.equal(result.output[0].content[0].text, "KIMI_BRIDGE_OK");
+  assert.equal(result.output[0].phase, "final_answer");
   assert.equal(captured.authorization, "Bearer super-secret-test-token");
-  assert.equal(captured.userAgent, "codex-kimi-bridge-node/0.2.0");
+  assert.equal(captured.userAgent, "codex-kimi-bridge-node/0.3.0");
   assert.equal(captured.body.messages[0].content, "PRIVATE_PROMPT_MARKER");
   assert.equal(captured.body.reasoning_effort, "low");
   assert.equal(logs.join("\n").includes("super-secret-test-token"), false);
   assert.equal(logs.join("\n").includes("PRIVATE_PROMPT_MARKER"), false);
+});
+
+test("bridges agent_message without forwarding internal metadata", async () => {
+  const captured = {};
+  const handler = createBridgeHandler({
+    fetchImpl: async (_url, init) => {
+      captured.body = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        id: "chatcmpl_agent_message",
+        model: "k3",
+        choices: [{
+          index: 0,
+          finish_reason: "stop",
+          message: { role: "assistant", content: "delegation received" },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+    logger: { error() {} },
+  });
+
+  const response = await invoke(handler, {
+    method: "POST",
+    url: "/v1/responses",
+    headers: {
+      authorization: "Bearer test-token",
+      "content-type": "application/json",
+    },
+    body: {
+      model: "k3",
+      input: [{
+        type: "agent_message",
+        id: "agent_msg_transport_only",
+        author: "/root",
+        recipient: "/root/kimi_frontend",
+        content: [
+          { type: "input_text", text: "Review the UI." },
+          {
+            type: "encrypted_content",
+            encrypted_content: "KIMI_HTTP_PAYLOAD_OK",
+          },
+        ],
+        internal_chat_message_metadata_passthrough: {
+          turn_id: "turn_internal_only",
+        },
+      }],
+      stream: false,
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().output[0].content[0].text, "delegation received");
+  assert.equal(captured.body.messages[0].role, "user");
+  assert.equal(
+    captured.body.messages[0].content,
+    "[Codex agent_message]\n{\"author\":\"/root\",\"recipient\":\"/root/kimi_frontend\"}\n[/Codex agent_message]\n\nReview the UI.",
+  );
+  const upstreamJson = JSON.stringify(captured.body);
+  assert.equal(upstreamJson.includes("agent_msg_transport_only"), false);
+  assert.equal(upstreamJson.includes("turn_internal_only"), false);
+  assert.equal(upstreamJson.includes("KIMI_HTTP_PAYLOAD_OK"), false);
+  assert.equal(upstreamJson.includes("encrypted_content"), false);
 });
 
 test("bridges Kimi Chat SSE to Responses SSE", async () => {
@@ -97,6 +159,7 @@ test("bridges Kimi Chat SSE to Responses SSE", async () => {
   assert.match(response.text(), /event: response\.created/);
   assert.match(response.text(), /event: response\.output_text\.delta/);
   assert.match(response.text(), /event: response\.completed/);
+  assert.match(response.text(), /"phase":"final_answer"/);
   assert.match(response.text(), /data: \[DONE\]/);
 });
 

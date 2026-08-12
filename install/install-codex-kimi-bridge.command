@@ -7,7 +7,7 @@ SOURCE_BIN="$SCRIPT_DIR/bin/codex-kimi-bridge"
 CHECKSUM_FILE="$SCRIPT_DIR/BINARY-SHA256.txt"
 TARGET_DIR="$HOME/.local/bin"
 TARGET_BIN="$TARGET_DIR/codex-kimi-bridge"
-EXPECTED_VERSION="0.3.0"
+EXPECTED_VERSION="0.4.0"
 
 if [[ ! -f "$SOURCE_BIN" ]]; then
   print -u2 "安装包不完整：找不到 bin/codex-kimi-bridge。"
@@ -76,6 +76,8 @@ print "版本：$INSTALLED_VERSION (Rust)"
 print ""
 print "安装器没有修改 Codex 配置、Keychain 或 shell PATH。"
 print "下一步请阅读 install/INSTALL-GUIDE.zh-CN.md，配置完成后从三种启动方式中任选一种。"
+print "审核后安装签名任务交接 Hooks：$TARGET_BIN hooks install"
+print "随后完全重启 Codex Desktop，输入 /hooks，信任 UserPromptSubmit 与 PreToolUse（Agent / spawn_agent / collaborationspawn_agent / collaboration.spawn_agent）。"
 if [[ -t 0 ]]; then
   print ""
   print "按回车关闭窗口。"

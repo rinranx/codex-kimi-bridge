@@ -126,6 +126,21 @@ jobs:
           npm --prefix node test
           npm --prefix node run smoke
 
+      - name: Require Rust and Node protocol parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup run 1.97.1 cargo run \
+            --manifest-path rust/Cargo.toml \
+            --locked \
+            --quiet \
+            -- translate-request --file compat/responses-request.json \
+            | jq -S . > "$RUNNER_TEMP/rust-translation.json"
+          node node/bin/codex-kimi-bridge-node.mjs \
+            translate-request --file compat/responses-request.json \
+            | jq -S . > "$RUNNER_TEMP/node-translation.json"
+          cmp "$RUNNER_TEMP/rust-translation.json" "$RUNNER_TEMP/node-translation.json"
+
       - name: Build and package macOS release assets
         shell: bash
         env:

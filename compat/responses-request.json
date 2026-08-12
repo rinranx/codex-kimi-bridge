@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "input_text",
-          "text": "Inspect the interface."
+          "text": "[KIMI_TASK]\nInspect the interface and return KIMI_VISIBLE_HANDOFF_OK.\n[/KIMI_TASK]"
         },
         {
           "type": "input_image",
@@ -20,6 +20,25 @@
           "video_url": "https://example.invalid/demo.mp4"
         }
       ]
+    },
+    {
+      "type": "agent_message",
+      "id": "agent_msg_transport_only",
+      "author": "/root",
+      "recipient": "/root/kimi_frontend",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Use the latest visible KIMI_TASK in the forked history."
+        },
+        {
+          "type": "encrypted_content",
+          "encrypted_content": "gAAAA_TEST_OPAQUE_PROVIDER_STATE_DO_NOT_FORWARD"
+        }
+      ],
+      "internal_chat_message_metadata_passthrough": {
+        "turn_id": "turn_internal_not_for_upstream"
+      }
     },
     {
       "type": "function_call",

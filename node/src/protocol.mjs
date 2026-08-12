@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { BridgeError } from "./errors.mjs";
+import { ENVELOPE_PREFIX } from "./handoff.mjs";
 import { parseSse } from "./sse.mjs";
 
 const TEXT_PART_TYPES = new Set(["input_text", "output_text", "text"]);
@@ -27,7 +28,14 @@ export function translateResponsesRequest(input, options = {}) {
     });
   }
 
-  appendResponsesInput(messages, input.input, toolMap, options.reasoningStore);
+  appendResponsesInput(
+    messages,
+    input.input,
+    toolMap,
+    options.reasoningStore,
+    options.handoffVerifier,
+    inputHasVisibleHandoff(input.input),
+  );
 
   if (messages.length === 0) {
     throw new BridgeError("input must contain at least one message.", {
@@ -110,8 +118,12 @@ export function translateChatCompletion(chat, context = {}) {
     message.reasoning_content,
   );
   const text = normalizeAssistantText(message.content);
+  const phase = assistantPhase(
+    Array.isArray(message.tool_calls) && message.tool_calls.length > 0,
+    choice.finish_reason,
+  );
   if (text) {
-    output.push(makeCompletedMessage(text));
+    output.push(makeCompletedMessage(text, makeId("msg"), phase));
   }
 
   for (const toolCall of message.tool_calls ?? []) {
@@ -298,6 +310,7 @@ export async function* translateChatCompletionStream(readable, context = {}) {
     const completed = makeCompletedMessage(
       state.message.text,
       state.message.itemId,
+      assistantPhase(state.toolCalls.size > 0, state.finishReason),
     );
     state.output[state.message.outputIndex] = completed;
     yield event(state, "response.output_text.done", {
@@ -382,7 +395,14 @@ export async function* translateChatCompletionStream(readable, context = {}) {
   });
 }
 
-function appendResponsesInput(messages, input, toolMap, reasoningStore) {
+function appendResponsesInput(
+  messages,
+  input,
+  toolMap,
+  reasoningStore,
+  handoffVerifier,
+  visibleHandoffAvailable,
+) {
   if (typeof input === "string") {
     messages.push({ role: "user", content: input });
     return;
@@ -405,7 +425,13 @@ function appendResponsesInput(messages, input, toolMap, reasoningStore) {
     if (IGNORED_INPUT_TYPES.has(item.type)) {
       continue;
     }
-    if (item.type === "message" || item.role) {
+    if (item.type === "agent_message") {
+      messages.push(translateAgentMessage(
+        item,
+        handoffVerifier,
+        visibleHandoffAvailable,
+      ));
+    } else if (item.type === "message" || item.role) {
       messages.push(translateMessage(item));
     } else if (item.type === "function_call") {
       const callId = item.call_id ?? item.id ?? makeId("call");
@@ -457,6 +483,175 @@ function appendResponsesInput(messages, input, toolMap, reasoningStore) {
   }
 }
 
+const AGENT_ROUTE_MAX_LENGTH = 256;
+const AGENT_ROUTE_PATTERN = /^[A-Za-z0-9/_\-.:@]+$/;
+const AGENT_MESSAGE_PREFIX_OPEN = "[Codex agent_message]";
+const AGENT_MESSAGE_PREFIX_CLOSE = "[/Codex agent_message]";
+
+function translateAgentMessage(item, handoffVerifier, visibleHandoffAvailable) {
+  const author = requireAgentRoute(item.author, "author");
+  const recipient = requireAgentRoute(item.recipient, "recipient");
+  const metadata = JSON.stringify({ author, recipient });
+  const prefix = `${AGENT_MESSAGE_PREFIX_OPEN}\n${metadata}\n${AGENT_MESSAGE_PREFIX_CLOSE}\n\n`;
+  const { content: translatedContent, hadSignedHandoff } =
+    translateAgentMessageContent(item.content, handoffVerifier, recipient);
+  if (!contentHasUpstreamValue(translatedContent)) {
+    throw new BridgeError(
+      "An agent_message must contain a non-empty Kimi-compatible task payload.",
+      { param: "input", code: "missing_agent_message_content" },
+    );
+  }
+  if (
+    !hadSignedHandoff &&
+    !visibleHandoffAvailable &&
+    agentMessageIsEmptyPayloadShell(translatedContent)
+  ) {
+    throw new BridgeError(
+      "The Kimi subagent task payload is empty. Install and trust the Codex Kimi handoff hooks, or include a visible [KIMI_TASK] in forked history.",
+      { param: "input", code: "missing_handoff_envelope" },
+    );
+  }
+  return {
+    role: "user",
+    content: prependAgentMessagePrefix(
+      translatedContent,
+      prefix,
+    ),
+  };
+}
+
+function translateAgentMessageContent(content, handoffVerifier, recipient) {
+  if (!Array.isArray(content)) {
+    return { content: translateContent(content, "user"), hadSignedHandoff: false };
+  }
+
+  const normalized = [];
+  let signedTask = null;
+  for (const part of content) {
+    if (!part || typeof part !== "object" || part.type !== "encrypted_content") {
+      normalized.push(part);
+      continue;
+    }
+    const envelope = typeof part.encrypted_content === "string" &&
+      part.encrypted_content.startsWith(ENVELOPE_PREFIX)
+      ? part.encrypted_content
+      : null;
+    if (envelope) {
+      if (signedTask !== null) {
+        throw new BridgeError(
+          "An agent_message must not contain multiple local handoff envelopes.",
+          { param: "input", code: "invalid_handoff_envelope" },
+        );
+      }
+      if (!handoffVerifier) {
+        throw new BridgeError(
+          "A signed local handoff was received, but its verification key is unavailable.",
+          { param: "input", code: "handoff_key_unavailable" },
+        );
+      }
+      signedTask = handoffVerifier.verifyForRecipient(envelope, recipient);
+    }
+    // encrypted_content is opaque provider state. A third-party bridge
+    // cannot decrypt it and must never reinterpret or forward it. The only
+    // exception is a locally signed CKB1 envelope verified above.
+  }
+  if (signedTask !== null) {
+    normalized.push({ type: "input_text", text: signedTask });
+  }
+  return {
+    content: translateContent(normalized, "user"),
+    hadSignedHandoff: signedTask !== null,
+  };
+}
+
+function inputHasVisibleHandoff(input) {
+  if (!Array.isArray(input)) {
+    return false;
+  }
+  return input.some((item) => {
+    if (!item || typeof item !== "object" || item.type === "agent_message") {
+      return false;
+    }
+    return visibleTextFragments(item.content).some((text) => markedTask(text) !== null);
+  });
+}
+
+function visibleTextFragments(content) {
+  if (typeof content === "string") {
+    return [content];
+  }
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  return content
+    .filter((part) => part && typeof part === "object" && TEXT_PART_TYPES.has(part.type))
+    .map((part) => part.text)
+    .filter((text) => typeof text === "string");
+}
+
+function markedTask(text) {
+  const open = text.lastIndexOf("[KIMI_TASK]");
+  if (open === -1) {
+    return null;
+  }
+  const tail = text.slice(open + "[KIMI_TASK]".length);
+  const close = tail.indexOf("[/KIMI_TASK]");
+  if (close === -1) {
+    return null;
+  }
+  return tail.slice(0, close).trim() || null;
+}
+
+function agentMessageIsEmptyPayloadShell(content) {
+  let text;
+  if (typeof content === "string") {
+    text = content;
+  } else if (
+    Array.isArray(content) &&
+    content.every((part) => part?.type === "text")
+  ) {
+    text = content.map((part) => part.text ?? "").join("\n");
+  } else {
+    return false;
+  }
+  const index = text.lastIndexOf("Payload:");
+  return index !== -1 && text.slice(index + "Payload:".length).trim().length === 0;
+}
+
+function requireAgentRoute(value, field) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > AGENT_ROUTE_MAX_LENGTH ||
+    !AGENT_ROUTE_PATTERN.test(value)
+  ) {
+    throw new BridgeError(
+      `An agent_message ${field} must be 1-${AGENT_ROUTE_MAX_LENGTH} ASCII characters using only letters, numbers, /, _, -, ., :, or @.`,
+      { param: "input", code: "invalid_agent_message" },
+    );
+  }
+  return value;
+}
+
+function prependAgentMessagePrefix(content, prefix) {
+  if (Array.isArray(content)) {
+    return [{ type: "text", text: prefix }, ...content];
+  }
+  return `${prefix}${typeof content === "string" ? content : coerceToolOutput(content)}`;
+}
+
+function contentHasUpstreamValue(content) {
+  if (typeof content === "string") {
+    return content.trim().length > 0;
+  }
+  return Array.isArray(content) && content.some((part) => {
+    if (part?.type === "text") {
+      return typeof part.text === "string" && part.text.trim().length > 0;
+    }
+    return part?.type === "image_url" || part?.type === "video_url";
+  });
+}
+
 function translateMessage(item) {
   const role = item.role === "developer" ? "system" : item.role;
   if (!["system", "user", "assistant", "tool"].includes(role)) {
@@ -494,6 +689,9 @@ function translateContent(content, role) {
     }
     if (TEXT_PART_TYPES.has(part.type)) {
       parts.push({ type: "text", text: part.text ?? "" });
+    } else if (part.type === "encrypted_content") {
+      // Outside agent_message, this remains opaque provider state.
+      continue;
     } else if (part.type === "refusal") {
       parts.push({ type: "text", text: part.refusal ?? "" });
     } else if (part.type === "input_image" || part.type === "image_url") {
@@ -876,12 +1074,23 @@ function derivePromptCacheKey(input, model, messages) {
   return `codex_${hash(JSON.stringify({ model, stablePrefix })).slice(0, 40)}`;
 }
 
-function makeCompletedMessage(text, id = makeId("msg")) {
+function assistantPhase(hasToolCalls, finishReason) {
+  if (
+    hasToolCalls ||
+    ["tool_calls", "length", "content_filter"].includes(finishReason)
+  ) {
+    return "commentary";
+  }
+  return "final_answer";
+}
+
+function makeCompletedMessage(text, id = makeId("msg"), phase = "final_answer") {
   return {
     id,
     type: "message",
     status: "completed",
     role: "assistant",
+    phase,
     content: [
       {
         type: "output_text",
@@ -934,6 +1143,7 @@ function startMessage(state) {
       type: "message",
       status: "in_progress",
       role: "assistant",
+      phase: "commentary",
       content: [],
     },
   };

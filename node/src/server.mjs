@@ -4,6 +4,10 @@ import { URL } from "node:url";
 
 import { BridgeError, toErrorEnvelope } from "./errors.mjs";
 import {
+  defaultHandoffStateDir,
+  loadHandoffVerifierIfPresent,
+} from "./handoff.mjs";
+import {
   translateChatCompletion,
   translateChatCompletionStream,
   translateResponsesRequest,
@@ -115,6 +119,9 @@ export function createBridgeHandler(options = {}) {
       const translated = translateResponsesRequest(parsedBody, {
         defaultModel: config.defaultModel,
         reasoningStore,
+        // Load per request because a trusted hook can create the key after a
+        // long-running bridge process has already started.
+        handoffVerifier: loadHandoffVerifierIfPresent(config.handoffStateDir),
       });
       const upstreamResponse = await fetchImpl(config.upstreamUrl, {
         method: "POST",
@@ -262,6 +269,7 @@ function normalizeServerOptions(options) {
     defaultModel: options.defaultModel ?? "k3",
     timeoutMs: positiveInteger(options.timeoutMs, 7_200_000),
     maxBodyBytes: positiveInteger(options.maxBodyBytes, 128 * 1024 * 1024),
+    handoffStateDir: options.handoffStateDir ?? defaultHandoffStateDir(),
     logger: options.logger ?? console,
   };
 }

@@ -2,7 +2,7 @@
 
 [简体中文](INSTALL-GUIDE.zh-CN.md) | **English**
 
-The default installation is the Rust `codex-kimi-bridge` binary. This guide is only for the Node fallback command, `codex-kimi-bridge-node 0.2.0`.
+The default installation is the Rust `codex-kimi-bridge` binary. This guide is only for the Node fallback command: the published package is `0.2.0`, while this directory contains the `0.3.0` candidate source.
 
 ## Install
 

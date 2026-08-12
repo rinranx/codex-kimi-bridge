@@ -1,5 +1,8 @@
 use crate::error::{BridgeError, BridgeResult, sanitize_provider_error};
-use crate::protocol::{StreamTranslator, translate_chat_completion, translate_responses_request};
+use crate::handoff::{HandoffVerifier, default_state_dir};
+use crate::protocol::{
+    StreamTranslator, translate_chat_completion, translate_responses_request_with_handoff,
+};
 use crate::reasoning::ReasoningStore;
 use crate::sse::{SseDecoder, encode_done, encode_event};
 use crate::{DEFAULT_UPSTREAM, VERSION};
@@ -264,10 +267,17 @@ async fn handle_inner(state: AppState, request: Request<Body>) -> BridgeResult<R
         })?;
     let parsed: Value = serde_json::from_slice(&body)
         .map_err(|_| BridgeError::new("Request body must be valid JSON.").code("invalid_json"))?;
-    let translated = translate_responses_request(
+    // Load the verifier for every request. The hook may create the signing key
+    // after a long-running LaunchAgent has already started.
+    let handoff_verifier = match default_state_dir() {
+        Ok(state_dir) => HandoffVerifier::from_state_dir_if_present(&state_dir)?,
+        Err(_) => None,
+    };
+    let translated = translate_responses_request_with_handoff(
         parsed,
         &state.config.model,
         Some(state.reasoning_store.clone()),
+        handoff_verifier.as_ref(),
     )?;
     let streaming = translated.body.get("stream").and_then(Value::as_bool) == Some(true);
     let upstream = state
@@ -725,6 +735,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let result = response_json(response).await;
         assert_eq!(result["output"][0]["content"][0]["text"], "KIMI_BRIDGE_OK");
+        assert_eq!(result["output"][0]["phase"], "final_answer");
         let captured = captured.lock().await;
         assert_eq!(
             captured[0].authorization.as_deref(),
@@ -732,13 +743,82 @@ mod tests {
         );
         assert_eq!(
             captured[0].user_agent.as_deref(),
-            Some("codex-kimi-bridge/0.3.0")
+            Some("codex-kimi-bridge/0.4.0")
         );
         assert_eq!(
             captured[0].body["messages"][0]["content"],
             "PRIVATE_PROMPT_MARKER"
         );
         assert_eq!(captured[0].body["reasoning_effort"], "low");
+        drop(captured);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn bridges_agent_message_to_chat_without_internal_metadata() {
+        let (upstream, captured, task) = spawn_mock_upstream(vec![MockReply {
+            status: StatusCode::OK,
+            content_type: "application/json",
+            body: json!({
+                "id": "chatcmpl_agent_message",
+                "model": "k3",
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": { "role": "assistant", "content": "delegation received" }
+                }]
+            })
+            .to_string(),
+        }])
+        .await;
+        let response = bridge_for(upstream)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/responses")
+                    .header(AUTHORIZATION, "Bearer test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "model": "k3",
+                            "input": [{
+                                "type": "agent_message",
+                                "id": "agent_msg_transport_only",
+                                "author": "/root",
+                                "recipient": "/root/kimi_frontend",
+                                "content": [
+                                    { "type": "input_text", "text": "Review the UI." },
+                                    { "type": "encrypted_content", "encrypted_content": "KIMI_HTTP_PAYLOAD_OK" }
+                                ],
+                                "internal_chat_message_metadata_passthrough": {
+                                    "turn_id": "turn_internal_only"
+                                }
+                            }],
+                            "stream": false
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(response).await["output"][0]["content"][0]["text"],
+            "delegation received"
+        );
+        let captured = captured.lock().await;
+        assert_eq!(captured[0].body["messages"][0]["role"], "user");
+        assert_eq!(
+            captured[0].body["messages"][0]["content"],
+            "[Codex agent_message]\n{\"author\":\"/root\",\"recipient\":\"/root/kimi_frontend\"}\n[/Codex agent_message]\n\nReview the UI."
+        );
+        let upstream_json = captured[0].body.to_string();
+        assert!(!upstream_json.contains("agent_msg_transport_only"));
+        assert!(!upstream_json.contains("turn_internal_only"));
+        assert!(!upstream_json.contains("KIMI_HTTP_PAYLOAD_OK"));
+        assert!(!upstream_json.contains("encrypted_content"));
         drop(captured);
         task.abort();
     }
@@ -794,6 +874,7 @@ mod tests {
         assert!(text.contains("event: response.created"));
         assert!(text.contains("event: response.output_text.delta"));
         assert!(text.contains("event: response.completed"));
+        assert!(text.contains("\"phase\":\"final_answer\""));
         assert!(text.contains("data: [DONE]"));
         task.abort();
     }

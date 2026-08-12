@@ -1,5 +1,7 @@
 pub mod cli;
 pub mod error;
+pub mod handoff;
+pub mod hook_config;
 pub mod protocol;
 pub mod reasoning;
 pub mod server;

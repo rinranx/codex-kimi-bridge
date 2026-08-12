@@ -2,7 +2,7 @@
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-项目默认安装的是 Rust 版 `codex-kimi-bridge`。本说明仅用于安装 Node 回退命令 `codex-kimi-bridge-node 0.2.0`。
+项目默认安装的是 Rust 版 `codex-kimi-bridge`。本说明仅用于 Node 回退命令：当前发布包为 `0.2.0`，本目录候选源码为 `0.3.0`。
 
 ## 安装
 

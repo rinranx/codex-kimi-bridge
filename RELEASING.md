@@ -10,10 +10,11 @@ Before the first release, enable **Release immutability** in the repository's Se
 
 1. Choose a new SemVer version. Never reuse an existing version or tag.
 2. Update the Rust crate, installer checks, tests, documentation, and fixed download links to that version.
-3. Add a new `release-manifests/v<version>.json` and matching `.md` release-notes file.
-4. Push the source commit to `main` only after local tests pass and Release immutability is enabled.
-5. The `Publish immutable release` workflow tests both implementations, builds both macOS architectures, creates checksums, creates an annotated tag, uploads assets to a draft release, and compares every server-reported asset digest and size with the local build before publishing. The manifest decides whether the final Release is stable or a prerelease.
-6. After GitHub reports the published Release as immutable, the workflow downloads every public asset, compares it byte-for-byte with the local build, and rechecks `SHA256SUMS.txt`.
+3. For protocol changes, compare the Rust and Node translations of `compat/responses-request.json`. For signed handoff changes, require offline tests for hook capture, configuration merge/uninstall, HMAC verification, tampering, expiry, recipient binding, empty-payload failure, and explicit marked recursive handoff. Then complete [`compat/AGENT-MESSAGE-INTEGRATION.md`](compat/AGENT-MESSAGE-INTEGRATION.md) with explicit user consent; the real Desktop check consumes Kimi quota.
+4. Add a new `release-manifests/v<version>.json` and matching `.md` release-notes file.
+5. Push the source commit to `main` only after local tests pass and Release immutability is enabled.
+6. The `Publish immutable release` workflow tests both implementations, builds both macOS architectures, creates checksums, creates an annotated tag, uploads assets to a draft release, and compares every server-reported asset digest and size with the local build before publishing. The manifest decides whether the final Release is stable or a prerelease.
+7. After GitHub reports the published Release as immutable, the workflow downloads every public asset, compares it byte-for-byte with the local build, and rechecks `SHA256SUMS.txt`.
 
 The workflow never uses `--clobber`. If a released artifact is wrong, increment the version and publish another Release. Do not move a tag, delete an asset, or replace a filename attached to an existing version.
 

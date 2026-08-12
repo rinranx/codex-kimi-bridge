@@ -1,6 +1,6 @@
 {
   "name": "codex-kimi-bridge-node",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The maintained Node.js fallback implementation of Codex Kimi Bridge.",
   "type": "module",
   "bin": {
@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node --check bin/codex-kimi-bridge-node.mjs && node --check src/cli.mjs && node --check src/server.mjs && node --check src/protocol.mjs && node --check src/reasoning-store.mjs && node --check src/sse.mjs",
+    "check": "node --check bin/codex-kimi-bridge-node.mjs && node --check src/cli.mjs && node --check src/server.mjs && node --check src/protocol.mjs && node --check src/handoff.mjs && node --check src/reasoning-store.mjs && node --check src/sse.mjs",
     "smoke": "node bin/codex-kimi-bridge-node.mjs --help"
   },
   "engines": {
