@@ -60,10 +60,16 @@ fi
 mkdir -p "$TARGET_DIR" "$LOG_DIR"
 TEMP_PLIST="$(/usr/bin/mktemp "$TARGET_DIR/.$LABEL.XXXXXX")"
 cp "$TEMPLATE_PLIST" "$TEMP_PLIST"
-/usr/bin/plutil -replace ProgramArguments.0 -string "$BRIDGE_BIN" "$TEMP_PLIST"
+/usr/bin/plutil -remove ProgramArguments.0 "$TEMP_PLIST"
+/usr/bin/plutil -insert ProgramArguments.0 -string "$BRIDGE_BIN" "$TEMP_PLIST"
 /usr/bin/plutil -replace StandardOutPath -string "$STDOUT_LOG" "$TEMP_PLIST"
 /usr/bin/plutil -replace StandardErrorPath -string "$STDERR_LOG" "$TEMP_PLIST"
 /usr/bin/plutil -lint "$TEMP_PLIST" >/dev/null || fail "生成的 LaunchAgent 配置无效。"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$TEMP_PLIST")" == "$BRIDGE_BIN" ]] || fail "生成的 LaunchAgent 缺少 Rust 桥接路径。"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:1' "$TEMP_PLIST")" == "serve" ]] || fail "生成的 LaunchAgent 缺少 serve 参数。"
+if /usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$TEMP_PLIST" >/dev/null 2>&1; then
+  fail "生成的 LaunchAgent 含有多余参数。"
+fi
 chmod 0644 "$TEMP_PLIST"
 
 if [[ "$SERVICE_LOADED" == true ]]; then
@@ -93,7 +99,9 @@ chmod 0644 "$TARGET_PLIST"
 if ! /bin/launchctl bootstrap "$GUI_DOMAIN" "$TARGET_PLIST"; then
   if [[ -n "$BACKUP_PLIST" && -e "$BACKUP_PLIST" ]]; then
     mv -f "$BACKUP_PLIST" "$TARGET_PLIST"
-    /bin/launchctl bootstrap "$GUI_DOMAIN" "$TARGET_PLIST" >/dev/null 2>&1 || true
+    if [[ "$SERVICE_LOADED" == true ]]; then
+      /bin/launchctl bootstrap "$GUI_DOMAIN" "$TARGET_PLIST" >/dev/null 2>&1 || true
+    fi
   fi
   fail "LaunchAgent 加载失败。"
 fi
