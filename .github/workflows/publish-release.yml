@@ -167,7 +167,20 @@ jobs:
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
-          existing_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
+          api_get() {
+            local endpoint="$1"
+            local response
+            for attempt in {1..10}; do
+              if response="$(gh api "$endpoint")"; then
+                printf '%s' "$response"
+                return 0
+              fi
+              sleep 3
+            done
+            return 1
+          }
+
+          existing_json="$(api_get "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
           if [[ -n "$existing_json" ]]; then
             if [[ "$RETRY_FAILED_DRAFT" != "true" || "$(jq -r '.draft' <<< "$existing_json")" != "true" ]]; then
               echo "A GitHub Release already exists for $tag; refusing to overwrite it." >&2
@@ -178,7 +191,7 @@ jobs:
             [[ "$(jq 'length' <<< "$existing_assets")" == "6" ]]
             [[ "$(jq '[.[].state == "uploaded"] | all' <<< "$existing_assets")" == "true" ]]
             gh release delete "$tag" --yes
-            [[ -z "$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -r --arg tag "$tag" '.[] | select(.tag_name == $tag) | .id' | head -n 1)" ]]
+            [[ -z "$(api_get "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -r --arg tag "$tag" '.[] | select(.tag_name == $tag) | .id' | head -n 1)" ]]
           fi
 
           gh release create "$tag" "$RUNNER_TEMP"/release-assets/* \
@@ -198,7 +211,11 @@ jobs:
           tag="$RELEASE_TAG"
           release_json=""
           for attempt in {1..30}; do
-            release_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' | head -n 1)"
+            if ! releases_json="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100")"; then
+              sleep 2
+              continue
+            fi
+            release_json="$(jq -c --arg tag "$tag" '.[] | select(.tag_name == $tag)' <<< "$releases_json" | head -n 1)"
             if [[ -n "$release_json" ]] \
               && [[ "$(jq -r '.draft' <<< "$release_json")" == "true" ]] \
               && [[ "$(jq -r '.prerelease' <<< "$release_json")" == "true" ]] \
@@ -240,7 +257,10 @@ jobs:
 
           immutable="false"
           for attempt in {1..15}; do
-            release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+            if ! release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"; then
+              sleep 2
+              continue
+            fi
             [[ "$(jq -r '.draft' <<< "$release_json")" == "false" ]]
             immutable="$(jq -r '.immutable // false' <<< "$release_json")"
             [[ "$immutable" == "true" ]] && break
