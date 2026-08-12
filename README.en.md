@@ -15,12 +15,13 @@ Rust is the default implementation starting with `0.2.0-alpha.1`. Users do not n
 ## Downloads
 
 - Project: <https://github.com/rinranx/codex-kimi-bridge>
-- Recommended universal macOS kit (Apple Silicon + Intel): <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
-- Apple Silicon binary: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-arm64-0.2.0-alpha.1.tar.gz>
-- Intel Mac binary: <https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.1.tar.gz>
-- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/tree/main/downloads>
+- Current release: [`v0.2.0-alpha.2`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.2.0-alpha.2)
+- Recommended universal macOS kit (Apple Silicon + Intel): <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
+- Apple Silicon binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-arm64-0.2.0-alpha.2.tar.gz>
+- Intel Mac binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.2.tar.gz>
+- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/SHA256SUMS.txt>
 
-This is the first Rust alpha and is not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
+Build artifacts are published only to versioned GitHub Releases; files under `main/downloads` are no longer overwritten. This is still an alpha and is not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
 
 ## Simplest installation
 
@@ -236,7 +237,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-Open Platform remains an advanced route in `0.2.0-alpha.1`. Release validation primarily uses a Kimi Code membership key.
+Open Platform remains an advanced route in `0.2.0-alpha.2`. Release validation primarily uses a Kimi Code membership key.
 
 ## Store or replace the API key
 

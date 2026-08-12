@@ -2,7 +2,7 @@
 
 [简体中文](INSTALL-GUIDE.zh-CN.md) | **English**
 
-This guide installs the default single-binary Rust implementation, `codex-kimi-bridge 0.2.0-alpha.1`. New users do not need Rust, Node.js, or npm. The Node implementation remains only as a fallback under [`node/`](../node/).
+This guide installs the default single-binary Rust implementation, `codex-kimi-bridge 0.2.0-alpha.2`. New users do not need Rust, Node.js, or npm. The Node implementation remains only as a fallback under [`node/`](../node/).
 
 ## 1. Requirements
 
@@ -12,12 +12,12 @@ You need macOS, Codex Desktop, a Kimi Code membership key or Kimi API Open Platf
 
 Download the recommended kit:
 
-<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
+<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
 
-Compare it with `INSTALL-KIT-SHA256.txt` from the same directory:
+Download [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/INSTALL-KIT-SHA256.txt) from the same Release and compare it:
 
 ```sh
-shasum -a 256 codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip
 ```
 
 This alpha is not Apple-notarized. After verifying the checksum, you may need to right-click a `.command` file and choose Open.
@@ -49,7 +49,7 @@ Verify it:
 $HOME/.local/bin/codex-kimi-bridge --version
 ```
 
-Expected: `0.2.0-alpha.1`.
+Expected: `0.2.0-alpha.2`.
 
 Optionally add this line to `~/.zprofile` and open a new terminal:
 
@@ -239,7 +239,7 @@ curl -s http://127.0.0.1:8787/health
 $HOME/.local/bin/codex-kimi-bridge doctor --json
 ```
 
-Health should identify `service: codex-kimi-bridge`, `implementation: rust`, and version `0.2.0-alpha.1`. The default doctor command does not contact Kimi. Only with explicit consent to consume a small amount of quota, run:
+Health should identify `service: codex-kimi-bridge`, `implementation: rust`, and version `0.2.0-alpha.2`. The default doctor command does not contact Kimi. Only with explicit consent to consume a small amount of quota, run:
 
 ```sh
 $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3

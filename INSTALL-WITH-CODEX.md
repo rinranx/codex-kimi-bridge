@@ -29,9 +29,9 @@ https://github.com/rinranx/codex-kimi-bridge
 
 请严格遵守以下要求：
 
-1. 先完整阅读 README.md、INSTALL-WITH-CODEX.md、install/INSTALL-GUIDE.zh-CN.md、SECURITY.md 和 downloads 中的校验文件。
-2. 默认安装 Rust 单文件版 codex-kimi-bridge 0.2.0-alpha.1。不要安装名字相似的 npm 包，也不要把 node/ 回退版当成默认版。新安装不要求 Rust、Node.js 或 npm。
-3. 只从本仓库 downloads/ 下载 macOS 安装包，先核对 SHA-256，再安装到 ~/.local/bin/codex-kimi-bridge。不要使用 sudo。
+1. 先完整阅读 README.md、INSTALL-WITH-CODEX.md、install/INSTALL-GUIDE.zh-CN.md、SECURITY.md，以及 GitHub Release v0.2.0-alpha.2 随附的 SHA-256 校验文件。
+2. 默认安装 Rust 单文件版 codex-kimi-bridge 0.2.0-alpha.2。不要安装名字相似的 npm 包，也不要把 node/ 回退版当成默认版。新安装不要求 Rust、Node.js 或 npm。
+3. 只从本仓库固定版本的 GitHub Release v0.2.0-alpha.2 下载 macOS 安装包，先核对 SHA-256，再安装到 ~/.local/bin/codex-kimi-bridge。不要使用 sudo，也不要从 main/downloads 获取构建产物。
 4. 安装前只读检查 command -v codex-kimi-bridge 和 8787 端口。如果发现旧的 npm 0.1.0 同名命令或未知占用，先报告具体路径／进程并征得我的确认；不要擅自卸载、覆盖或结束进程。得到确认后，旧官方 npm 包可用 npm uninstall --global codex-kimi-bridge 移除。
 5. 如果我还没说明 Key 类型和会员等级，请先问清。根据 README 的表格选择正确的模型、上游、上下文窗口和自动压缩值；不要默认所有人都有 Allegretto 1M 权限。Kimi Code 会员 Key 与 Kimi API 开放平台 Key、模型和地址不能混用。
 6. 不要让我把 API Key 粘贴到聊天。使用 macOS Keychain 命令，让我只在终端安全提示中输入；服务名保持 codex-kimi-code-api-key。不要显示、记录或复述 Key。
@@ -49,7 +49,7 @@ https://github.com/rinranx/codex-kimi-bridge
 
 ## Codex 应完成的结果
 
-- `~/.local/bin/codex-kimi-bridge --version` 输出 `0.2.0-alpha.1`
+- `~/.local/bin/codex-kimi-bridge --version` 输出 `0.2.0-alpha.2`
 - `/health` 显示 `implementation: rust`
 - API Key 只在 Keychain 中
 - `~/.codex/config.toml` 保留原配置且没有重复表
@@ -58,6 +58,6 @@ https://github.com/rinranx/codex-kimi-bridge
 - 已明确选择 Codex 按需、双击终端或 LaunchAgent 三种启动方式之一
 - 未经确认没有发出真实 Kimi 请求
 
-若 Codex 无法读取 GitHub，可先手动下载[完整 macOS 安装包](https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip)，把解压后的文件夹交给它，并把提示词第一句改为“请从我提供的本地安装包安装”。
+若 Codex 无法读取 GitHub，可先手动下载[完整 macOS 安装包](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip)，把解压后的文件夹交给它，并把提示词第一句改为“请从我提供的本地安装包安装”。
 
 更细的人工步骤见[完整安装指南](install/INSTALL-GUIDE.zh-CN.md)。

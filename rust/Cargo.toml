@@ -1,6 +1,6 @@
 [package]
 name = "codex-kimi-bridge"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Local OpenAI Responses to Kimi Chat Completions bridge for Codex Desktop"
@@ -31,4 +31,3 @@ tower = { version = "0.5.3", features = ["util"] }
 codegen-units = 1
 lto = "thin"
 strip = true
-

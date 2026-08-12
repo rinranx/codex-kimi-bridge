@@ -2,7 +2,7 @@
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.2.0-alpha.1`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
+本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.2.0-alpha.2`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
 
 ## 1. 准备
 
@@ -18,12 +18,12 @@
 
 推荐下载：
 
-<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
+<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
 
-下载同目录中的 `INSTALL-KIT-SHA256.txt`，然后在终端进入下载目录运行：
+同时下载同一 Release 中的 [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/INSTALL-KIT-SHA256.txt)，然后在终端进入下载目录运行：
 
 ```sh
-shasum -a 256 codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip
 ```
 
 输出应与校验文件完全一致。本 alpha 尚未做 Apple 公证；首次打开 `.command` 时，可能需要右键文件并选择“打开”。
@@ -66,7 +66,7 @@ $HOME/.local/bin/codex-kimi-bridge --version
 预期输出：
 
 ```text
-0.2.0-alpha.1
+0.2.0-alpha.2
 ```
 
 如果希望在任意终端直接输入命令，可把下面一行加入 `~/.zprofile`，再新开终端：
@@ -276,7 +276,7 @@ $HOME/.local/bin/codex-kimi-bridge doctor --json
 健康信息应包含：
 
 ```json
-{"service":"codex-kimi-bridge","implementation":"rust","version":"0.2.0-alpha.1"}
+{"service":"codex-kimi-bridge","implementation":"rust","version":"0.2.0-alpha.2"}
 ```
 
 `doctor --json` 不会联系 Kimi。只有明确愿意消耗少量额度时才运行：

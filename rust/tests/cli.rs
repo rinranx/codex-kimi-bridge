@@ -27,7 +27,7 @@ fn run_with_stdin(args: &[&str], input: &str) -> std::process::Output {
 fn reports_version() {
     let output = Command::new(binary()).arg("--version").output().unwrap();
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "0.2.0-alpha.1\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "0.2.0-alpha.2\n");
 }
 
 #[test]

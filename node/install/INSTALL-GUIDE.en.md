@@ -17,7 +17,7 @@ codex-kimi-bridge-node --version
 From the repository root, you can also install the packaged fallback:
 
 ```sh
-npm install --global ./downloads/node/codex-kimi-bridge-node-0.1.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-node-0.1.0.tgz
 ```
 
 Do not use `sudo npm install`, and do not change permissions across your home directory or npm cache.

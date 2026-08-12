@@ -38,7 +38,7 @@ Installing the fallback does not modify `~/.codex/config.toml`. Because the loca
 You can also install the packaged fallback from the repository root:
 
 ```sh
-npm install --global ./downloads/node/codex-kimi-bridge-node-0.1.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-node-0.1.0.tgz
 ```
 
 ## Features

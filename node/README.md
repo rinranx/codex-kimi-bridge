@@ -38,7 +38,7 @@ codex-kimi-bridge-node serve
 也可以在项目根目录安装已打包的回退文件：
 
 ```sh
-npm install --global ./downloads/node/codex-kimi-bridge-node-0.1.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-node-0.1.0.tgz
 ```
 
 ## 功能

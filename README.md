@@ -15,12 +15,13 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 ## 下载
 
 - 项目主页：<https://github.com/rinranx/codex-kimi-bridge>
-- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.1.zip>
-- Apple Silicon 二进制包：<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-arm64-0.2.0-alpha.1.tar.gz>
-- Intel Mac 二进制包：<https://raw.githubusercontent.com/rinranx/codex-kimi-bridge/main/downloads/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.1.tar.gz>
-- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/tree/main/downloads>
+- 当前版本：[`v0.2.0-alpha.2`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.2.0-alpha.2)
+- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-install-kit-0.2.0-alpha.2.zip>
+- Apple Silicon 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-arm64-0.2.0-alpha.2.tar.gz>
+- Intel Mac 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/codex-kimi-bridge-macos-x86_64-0.2.0-alpha.2.tar.gz>
+- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.2.0-alpha.2/SHA256SUMS.txt>
 
-这是首个 Rust alpha 版本，目前未做 Apple 公证。首次打开 `.command` 时，macOS 可能要求右键选择“打开”。请先核对 SHA-256。
+构建产物只发布到带版本号的 GitHub Release，不再从 `main/downloads` 覆盖同名文件。当前仍为 alpha，尚未做 Apple 公证。首次打开 `.command` 时，macOS 可能要求右键选择“打开”。请先核对 SHA-256。
 
 ## 最简单的安装方式
 
@@ -238,7 +239,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-开放平台路线在 `0.2.0-alpha.1` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
+开放平台路线在 `0.2.0-alpha.2` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
 
 ## 保存或更换 API Key
 

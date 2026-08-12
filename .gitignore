@@ -4,4 +4,5 @@ coverage/
 npm-debug.log*
 rust/target/
 target/
+/dist/
 *.tmp
