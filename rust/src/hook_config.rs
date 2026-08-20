@@ -10,8 +10,7 @@ use uuid::Uuid;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 const MANAGED_MARKER: &str = "codex-kimi-bridge-handoff-v1";
-const AGENT_TOOL_MATCHER: &str =
-    "^(Agent|spawn_agent|collaborationspawn_agent|collaboration[.:_]+spawn_agent)$";
+const AGENT_TOOL_MATCHER: &str = "^(Agent|spawn_agent|send_message|followup_task|collaborationspawn_agent|collaborationsend_message|collaborationfollowup_task|collaboration[.:_]+(spawn_agent|send_message|followup_task))$";
 const EVENTS: [&str; 2] = ["UserPromptSubmit", "PreToolUse"];
 
 pub fn default_hooks_file() -> BridgeResult<PathBuf> {
@@ -392,9 +391,7 @@ mod tests {
         assert!(installed["backup"].as_str().is_some());
         let text = fs::read_to_string(&hooks_file).unwrap();
         assert!(text.contains("keep-me"));
-        assert!(text.contains(
-            "\"matcher\": \"^(Agent|spawn_agent|collaborationspawn_agent|collaboration[.:_]+spawn_agent)$\""
-        ));
+        assert!(text.contains(AGENT_TOOL_MATCHER));
         assert!(!text.contains("\"matcher\": \"^Agent$\""));
         assert!(!text.contains("/old/codex-kimi-bridge"));
         assert!(text.contains(MANAGED_MARKER));

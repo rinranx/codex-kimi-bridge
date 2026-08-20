@@ -15,12 +15,12 @@ Codex Desktop ── Responses API ──> 127.0.0.1:8787
 ## 下载
 
 - 项目主页：<https://github.com/rinranx/codex-kimi-bridge>
-- 当前版本：[`v0.4.0`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.0)
-- `0.4.0` 增加经过用户信任的 Codex Hooks、本机签名任务信封、失败关闭校验和原生子代理消息分类
-- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-install-kit-0.4.0.zip>
-- Apple Silicon 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-arm64-0.4.0.tar.gz>
-- Intel Mac 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-x86_64-0.4.0.tar.gz>
-- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/SHA256SUMS.txt>
+- 当前版本：[`v0.4.1`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.1)
+- `0.4.1` 在签名任务交接与原生消息分类之上，新增运行中 Kimi 追发保护和专用错误分类
+- 推荐：macOS 通用安装包（Apple Silicon + Intel）：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-install-kit-0.4.1.zip>
+- Apple Silicon 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-arm64-0.4.1.tar.gz>
+- Intel Mac 二进制包：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-x86_64-0.4.1.tar.gz>
+- SHA-256：<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/SHA256SUMS.txt>
 
 构建产物只发布到带版本号的 GitHub Release，不再从 `main/downloads` 覆盖同名文件。当前 macOS 二进制尚未做 Apple 公证。首次打开 `.command` 时，macOS 可能要求右键选择“打开”。请先核对 SHA-256。
 
@@ -132,7 +132,7 @@ multi_agent_v2 = true
 
 ### Desktop 原生子代理与 `agent_message`
 
-`0.4.0` 支持 Codex Desktop 多代理层产生的 Responses `agent_message`，但不会尝试破解 OpenAI Provider 的私有状态。`0.3.4` 能安全过滤密文，却仍依赖不稳定的可见历史；`0.4.0` 改为使用 Codex 官方 Hook 生命周期，在任务进入跨 Provider 私有封装前建立一份可验证的本机交接信封。
+`0.4.0` 支持 Codex Desktop 多代理层产生的 Responses `agent_message`，但不会尝试破解 OpenAI Provider 的私有状态。`0.3.4` 能安全过滤密文，却仍依赖不稳定的可见历史；`0.4.0` 改为使用 Codex 官方 Hook 生命周期，在任务进入跨 Provider 私有封装前建立一份可验证的本机交接信封。`0.4.1` 进一步保护长任务：初始交接成功后，本机会短期登记该 Kimi 目标；父代理若误用 `send_message` 或 `followup_task` 追发消息，Hook 会在投递前拒绝，避免不可解密的后续密文中断正在工作的 Kimi。
 
 转换规则保持明确且最小化：
 
@@ -147,17 +147,17 @@ multi_agent_v2 = true
 
 #### 安装并信任本机交接 Hooks
 
-安装 `0.4.0` 二进制后运行：
+安装 `0.4.1` 二进制后运行：
 
 ```sh
 codex-kimi-bridge hooks install
 codex-kimi-bridge hooks status --json
 ```
 
-安装命令会安全合并 `~/.codex/hooks.json`，保留其他项目已有的 Hooks，并在改动前创建时间戳备份。这个流程使用 [Codex 官方 Hooks 接口](https://learn.chatgpt.com/docs/hooks)：受支持的 `PreToolUse` 可通过 `updatedInput` 改写调用。当前 Codex Multi-Agent V2 的 Hook 输入会把命名空间工具规范化为 `collaborationspawn_agent`（参见 [OpenAI Codex #33284](https://github.com/openai/codex/issues/33284)）；其他路径还可能使用 `Agent`、`spawn_agent` 或 `collaboration.spawn_agent`。安装器因此使用严格白名单 matcher `^(Agent|spawn_agent|collaborationspawn_agent|collaboration[.:_]+spawn_agent)$`。然后完全退出并重新打开 Codex Desktop，输入 `/hooks`，逐条检查并信任这两个命令：
+安装命令会安全合并 `~/.codex/hooks.json`，保留其他项目已有的 Hooks，并在改动前创建时间戳备份。这个流程使用 [Codex 官方 Hooks 接口](https://learn.chatgpt.com/docs/hooks)：受支持的 `PreToolUse` 可通过 `updatedInput` 改写或拒绝调用。当前 Codex Multi-Agent V2 的 Hook 输入可能把命名空间工具规范化为不带分隔符的名称（参见 [OpenAI Codex #33284](https://github.com/openai/codex/issues/33284)）。安装器因此严格匹配 `Agent`、`spawn_agent`、`send_message`、`followup_task` 及它们的 `collaboration` 扁平化／带分隔符形式。然后完全退出并重新打开 Codex Desktop，输入 `/hooks`，逐条检查并信任这两个命令：
 
 - `UserPromptSubmit`：把本轮可见用户请求临时保存到用户私有缓存
-- `PreToolUse`（matcher 覆盖 `Agent`、`spawn_agent`、V2 的 `collaborationspawn_agent` 与带分隔符的兼容名）：仅当 `agent_type = "kimi_frontend"` 时，把任务改写为本机签名信封，并把 `fork_turns` 设为 `"none"`
+- `PreToolUse`：仅当 `agent_type = "kimi_frontend"` 时，把初始任务改写为本机签名信封并把 `fork_turns` 设为 `"none"`；同时只拦截发往同一父会话已登记 Kimi 目标的 `send_message`／`followup_task`，其他代理调用保持不变
 
 推荐在请求中用 `[KIMI_TASK]` 与 `[/KIMI_TASK]` 包住要交给 Kimi 的精确任务；没有标记时会使用整条可见用户请求。其他代理调用不会被改写。要移除本项目 Hooks：
 
@@ -165,11 +165,11 @@ codex-kimi-bridge hooks status --json
 codex-kimi-bridge hooks uninstall
 ```
 
-Hooks 未安装、未获信任、任务缓存缺失、签名不符、信封过期或收件任务名不匹配时，`0.4.0` 会在联系 Kimi 之前失败关闭。若已完成历史中明确存在 `[KIMI_TASK]`，旧的正数 `fork_turns` 可继续作为兼容回退，但不再是默认路线。
+Hooks 未安装、未获信任、任务缓存缺失、签名不符、信封过期或收件任务名不匹配时，桥接会在联系 Kimi 之前失败关闭。`0.4.1` 会把初始空任务继续报告为 `missing_handoff_envelope`，把后续不可读空消息明确报告为 `unsupported_cross_provider_followup`。若已完成历史中明确存在 `[KIMI_TASK]`，旧的正数 `fork_turns` 可继续作为兼容回退，但不再是默认路线。
 
-本机信封提供完整性与来源校验，不提供加密保密：可见请求会以权限 `0600` 临时存放在 `~/Library/Caches/codex-kimi-bridge/handoff-v1`，24 小时后清理；签名密钥同样只允许当前 macOS 用户读取。不要把 API Key、密码或其他秘密写进交接任务。
+本机信封提供完整性与来源校验，不提供加密保密：可见请求和哈希命名的 Kimi 目标登记会以权限 `0600` 临时存放在 `~/Library/Caches/codex-kimi-bridge/handoff-v1`，目录权限为 `0700`；登记与信封六小时失效，陈旧文件 24 小时后清理。签名密钥同样只允许当前 macOS 用户读取。不要把 API Key、密码或其他秘密写进交接任务。
 
-请求仍走 Codex 原生 `spawn_agent` 路径，线程 ID、状态、结果交付和面板均由 Desktop 管理；桥接只转换协议和补齐标准消息分类，不伪造 UI 状态。`0.4.0` 已按 [`compat/AGENT-MESSAGE-INTEGRATION.md`](compat/AGENT-MESSAGE-INTEGRATION.md) 完成一次经用户授权的真实 Desktop 验收。
+请求仍走 Codex 原生 `spawn_agent` 路径，线程 ID、状态、结果交付和面板均由 Desktop 管理；桥接只转换协议和补齐标准消息分类，不伪造 UI 状态。`0.4.0` 已按 [`compat/AGENT-MESSAGE-INTEGRATION.md`](compat/AGENT-MESSAGE-INTEGRATION.md) 完成一次经用户授权的真实 Desktop 验收；`0.4.1` 还需要按同一文档完成长任务与追发拦截的发布验收。
 
 ## Codex Provider 配置
 
@@ -266,7 +266,7 @@ command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"
 args = []
 ```
 
-`xhigh` 会转换为 Kimi K3 的 `max`。模板保留 `multi_agent_v2`；默认让已获信任的 Hook 交接任务，并使用普通最终答案自动交付结果。跨 Provider 的 `send_message` / `followup_task` 仍不是可靠正文通道，递归子代理仍属实验功能。角色指令可以按任务修改；若只希望 Kimi 提供建议，请保留 `sandbox_mode = "read-only"` 和只读指令。
+`xhigh` 会转换为 Kimi K3 的 `max`。模板保留 `multi_agent_v2`；默认让已获信任的 Hook 交接任务，并使用普通最终答案自动交付结果。子代理启动后，主代理只能用 `wait_agent` 等待，不应对运行中的 Kimi 调用 `send_message` 或 `followup_task`；`0.4.1` 会对已登记目标提前拦截这两种追发。需要补充指令时，发送一条新的可见 `[KIMI_TASK]`，并创建一个新名称的 Kimi 子代理。递归子代理仍属实验功能。角色指令可以按任务修改；若只希望 Kimi 提供建议，请保留 `sandbox_mode = "read-only"` 和只读指令。
 
 ## 按会员等级选择 Kimi Code 模型
 
@@ -322,7 +322,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-开放平台路线在 `0.4.0` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
+开放平台路线在 `0.4.1` 中仍属于进阶配置。发布验收的主要路线是 Kimi Code 会员 Key。
 
 ## 保存或更换 API Key
 
@@ -393,8 +393,9 @@ npm run smoke
 ## 已知边界
 
 - 安全转换顶层及 `namespace` 内的 Responses `function` 和 `custom` tools；其他托管型工具会明确报错
-- `0.4.0` 依赖用户审查、信任并启用两条 Codex Hooks；没有有效 Hook 时，空任务会在联系 Kimi 前失败
+- `0.4.1` 依赖用户审查、信任并启用两条更新后的 Codex Hooks；没有有效 Hook 时，空任务会在联系 Kimi 前失败，运行中追发也无法在投递前受到保护
 - Hooks 只能捕获可见用户请求，不会也不能解密 OpenAI Provider 私有状态；`[KIMI_TASK]` 用于精确限定要交接的部分
+- 对运行中的 Kimi 只使用 `wait_agent`；`send_message`／`followup_task` 的正文可能只存在于 OpenAI 私有密文中，`0.4.1` 选择安全拒绝而不是猜测或重放旧任务
 - 不支持 `previous_response_id`；调用方需要发送完整对话 items
 - `parallel_tool_calls` 不转发
 - reasoning 状态只在当前桥接进程内存中；工具链中途重启后应新开子代理任务

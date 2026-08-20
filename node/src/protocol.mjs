@@ -506,6 +506,12 @@ function translateAgentMessage(item, handoffVerifier, visibleHandoffAvailable) {
     !visibleHandoffAvailable &&
     agentMessageIsEmptyPayloadShell(translatedContent)
   ) {
+    if (agentMessageIsFollowupShell(translatedContent)) {
+      throw new BridgeError(
+        "Codex wrapped a follow-up to an existing Kimi subagent in provider-private encrypted state, which this bridge cannot decrypt. Wait for automatic completion; for new instructions, submit a new visible [KIMI_TASK] and create a new Kimi subagent.",
+        { param: "input", code: "unsupported_cross_provider_followup" },
+      );
+    }
     throw new BridgeError(
       "The Kimi subagent task payload is empty. Install and trust the Codex Kimi handoff hooks, or include a visible [KIMI_TASK] in forked history.",
       { param: "input", code: "missing_handoff_envelope" },
@@ -603,19 +609,31 @@ function markedTask(text) {
 }
 
 function agentMessageIsEmptyPayloadShell(content) {
-  let text;
-  if (typeof content === "string") {
-    text = content;
-  } else if (
-    Array.isArray(content) &&
-    content.every((part) => part?.type === "text")
-  ) {
-    text = content.map((part) => part.text ?? "").join("\n");
-  } else {
+  const text = agentMessageShellText(content);
+  if (text === null) {
     return false;
   }
   const index = text.lastIndexOf("Payload:");
   return index !== -1 && text.slice(index + "Payload:".length).trim().length === 0;
+}
+
+function agentMessageIsFollowupShell(content) {
+  const text = agentMessageShellText(content);
+  return text !== null && text
+    .split(/\r?\n/)
+    .some((line) => line.trim() === "Message Type: MESSAGE");
+}
+
+function agentMessageShellText(content) {
+  if (typeof content === "string") {
+    return content;
+  } else if (
+    Array.isArray(content) &&
+    content.every((part) => part?.type === "text")
+  ) {
+    return content.map((part) => part.text ?? "").join("\n");
+  }
+  return null;
 }
 
 function requireAgentRoute(value, field) {

@@ -2,7 +2,7 @@
 
 [简体中文](INSTALL-GUIDE.zh-CN.md) | **English**
 
-The default installation is the Rust `codex-kimi-bridge` binary. This guide is only for the Node fallback command: the published package is `0.2.0`, while this directory contains the `0.3.0` candidate source.
+The default installation is the Rust `codex-kimi-bridge` binary. This guide is only for the Node fallback command `0.4.1`.
 
 ## Install
 
@@ -17,7 +17,7 @@ codex-kimi-bridge-node --version
 From the repository root, you can also install the packaged fallback:
 
 ```sh
-npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-node-0.2.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-node-0.4.1.tgz
 ```
 
 Do not use `sudo npm install`, and do not change permissions across your home directory or npm cache.

@@ -253,6 +253,33 @@ test("rejects agent_message with only opaque provider state", () => {
   );
 });
 
+test("reports opaque cross-provider followups distinctly", () => {
+  assert.throws(
+    () => translateResponsesRequest({
+      model: "k3",
+      input: [{
+        type: "agent_message",
+        author: "/root",
+        recipient: "/root/kimi_frontend",
+        content: [
+          {
+            type: "input_text",
+            text: "Message Type: MESSAGE\nTask name: /root/kimi_frontend\nSender: /root\nPayload:\n",
+          },
+          {
+            type: "encrypted_content",
+            encrypted_content: "gAAAA_OPAQUE_FOLLOWUP",
+          },
+        ],
+      }],
+    }),
+    (error) =>
+      error instanceof BridgeError &&
+      error.code === "unsupported_cross_provider_followup" &&
+      error.param === "input",
+  );
+});
+
 test("omits non-string opaque provider state", () => {
   const translated = translateResponsesRequest({
     model: "k3",

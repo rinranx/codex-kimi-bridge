@@ -2,7 +2,7 @@
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-项目默认安装的是 Rust 版 `codex-kimi-bridge`。本说明仅用于 Node 回退命令：当前发布包为 `0.2.0`，本目录候选源码为 `0.3.0`。
+项目默认安装的是 Rust 版 `codex-kimi-bridge`。本说明仅用于 Node 回退命令 `0.4.1`。
 
 ## 安装
 
@@ -17,7 +17,7 @@ codex-kimi-bridge-node --version
 也可以从项目根目录安装项目提供的回退 npm 包：
 
 ```sh
-npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.3.0/codex-kimi-bridge-node-0.2.0.tgz
+npm install --global https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-node-0.4.1.tgz
 ```
 
 不要使用 `sudo npm install`，也不要修改整个主目录或 npm 缓存的权限。

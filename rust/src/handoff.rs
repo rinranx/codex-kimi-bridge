@@ -20,6 +20,8 @@ const DEFAULT_ENVELOPE_TTL_SECONDS: i64 = 6 * 60 * 60;
 const MAX_ENVELOPE_TTL_SECONDS: i64 = 24 * 60 * 60;
 const MAX_CLOCK_SKEW_SECONDS: i64 = 5 * 60;
 const PROMPT_RETENTION_SECONDS: u64 = 24 * 60 * 60;
+const TARGET_RETENTION_SECONDS: u64 = 24 * 60 * 60;
+const TARGET_RECORD_VERSION: u64 = 1;
 const TARGET_AGENT_TYPE: &str = "kimi_frontend";
 const TASK_OPEN: &str = "[KIMI_TASK]";
 const TASK_CLOSE: &str = "[/KIMI_TASK]";
@@ -210,7 +212,30 @@ pub fn rewrite_pre_tool_use(
             "invalid_hook_input",
         )
     })?;
+    let tool_name = object
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let tool_input = object.get("tool_input").and_then(Value::as_object);
+
+    if is_followup_tool(tool_name) {
+        let Some(target) = tool_input
+            .and_then(|value| value.get("target"))
+            .and_then(Value::as_str)
+        else {
+            return Ok(None);
+        };
+        let session_id = hook_identifier(object, "session_id")?;
+        return match is_registered_kimi_target(state_dir, session_id, target, now) {
+            Ok(true) => Ok(Some(denied_cross_provider_followup_output())),
+            Ok(false) => Ok(None),
+            Err(_) => Ok(Some(denied_followup_guard_unavailable_output())),
+        };
+    }
+
+    if !is_spawn_tool(tool_name) {
+        return Ok(None);
+    }
     let agent_type = tool_input
         .and_then(|value| value.get("agent_type"))
         .and_then(Value::as_str);
@@ -285,6 +310,7 @@ fn rewrite_kimi_agent_call(
         "task": task,
     });
     let envelope = sign_payload(&key, &payload)?;
+    register_kimi_target(state_dir, session_id, task_name, now)?;
     let mut updated_input = tool_input.clone();
     updated_input.insert("message".into(), Value::String(envelope));
     updated_input.insert("fork_turns".into(), Value::String("none".into()));
@@ -299,6 +325,151 @@ fn denied_hook_output() -> Value {
             "permissionDecisionReason": "Kimi handoff preparation failed. Send a new visible user task and retry; the provider was not contacted."
         }
     })
+}
+
+fn denied_cross_provider_followup_output() -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "[unsupported_cross_provider_followup] codex-kimi-bridge blocked a follow-up to a running Kimi subagent because Codex would wrap it in provider-private encrypted state. Wait for automatic completion. For new instructions, submit a new visible [KIMI_TASK] and create a new Kimi subagent. The target was not contacted."
+        }
+    })
+}
+
+fn denied_followup_guard_unavailable_output() -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "[kimi_followup_guard_unavailable] codex-kimi-bridge could not verify whether this target is a Kimi subagent, so the follow-up was blocked safely. The target was not contacted."
+        }
+    })
+}
+
+fn is_spawn_tool(tool_name: &str) -> bool {
+    matches!(
+        normalized_tool_name(tool_name).as_str(),
+        "agent" | "spawnagent" | "collaborationspawnagent"
+    )
+}
+
+fn is_followup_tool(tool_name: &str) -> bool {
+    matches!(
+        normalized_tool_name(tool_name).as_str(),
+        "sendmessage" | "followuptask" | "collaborationsendmessage" | "collaborationfollowuptask"
+    )
+}
+
+fn normalized_tool_name(tool_name: &str) -> String {
+    tool_name
+        .bytes()
+        .filter(|byte| byte.is_ascii_alphanumeric())
+        .map(|byte| byte.to_ascii_lowercase() as char)
+        .collect()
+}
+
+fn register_kimi_target(
+    state_dir: &Path,
+    session_id: &str,
+    task_name: &str,
+    now: i64,
+) -> BridgeResult<()> {
+    let targets_dir = state_dir.join("targets");
+    ensure_private_directory(state_dir)?;
+    ensure_private_directory(&targets_dir)?;
+    cleanup_stale_targets(&targets_dir);
+    let record = json!({
+        "version": TARGET_RECORD_VERSION,
+        "session_id": session_id,
+        "task_name": task_name,
+        "created_at": now,
+        "expires_at": now.saturating_add(DEFAULT_ENVELOPE_TTL_SECONDS),
+    });
+    let bytes = serde_json::to_vec(&record).map_err(|_| {
+        handoff_error(
+            "The local Kimi target record could not be serialized.",
+            "handoff_target_unavailable",
+        )
+    })?;
+    write_private_atomic(
+        &target_record_path(&targets_dir, session_id, task_name),
+        &bytes,
+    )
+}
+
+fn is_registered_kimi_target(
+    state_dir: &Path,
+    session_id: &str,
+    target: &str,
+    now: i64,
+) -> BridgeResult<bool> {
+    let Some(task_name) = target
+        .rsplit('/')
+        .next()
+        .filter(|value| safe_identifier(value, 256))
+    else {
+        return Ok(false);
+    };
+    let path = target_record_path(&state_dir.join("targets"), session_id, task_name);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => {
+            return Err(handoff_error(
+                "The local Kimi target record could not be read.",
+                "handoff_target_unavailable",
+            ));
+        }
+    };
+    let record: Value = serde_json::from_str(&text).map_err(|_| {
+        handoff_error(
+            "The local Kimi target record is invalid.",
+            "handoff_target_unavailable",
+        )
+    })?;
+    let object = record.as_object().ok_or_else(|| {
+        handoff_error(
+            "The local Kimi target record is invalid.",
+            "handoff_target_unavailable",
+        )
+    })?;
+    let matches_target = object.get("version").and_then(Value::as_u64)
+        == Some(TARGET_RECORD_VERSION)
+        && object.get("session_id").and_then(Value::as_str) == Some(session_id)
+        && object.get("task_name").and_then(Value::as_str) == Some(task_name);
+    let created_at = object.get("created_at").and_then(Value::as_i64);
+    let expires_at = object.get("expires_at").and_then(Value::as_i64);
+    if !matches_target || created_at.is_none() || expires_at.is_none() {
+        return Err(handoff_error(
+            "The local Kimi target record is invalid.",
+            "handoff_target_unavailable",
+        ));
+    }
+    let created_at = created_at.expect("checked above");
+    let expires_at = expires_at.expect("checked above");
+    if expires_at < now {
+        let _ = fs::remove_file(path);
+        return Ok(false);
+    }
+    if created_at > now.saturating_add(MAX_CLOCK_SKEW_SECONDS)
+        || expires_at <= created_at
+        || expires_at.saturating_sub(created_at) > MAX_ENVELOPE_TTL_SECONDS
+    {
+        return Err(handoff_error(
+            "The local Kimi target record timing is invalid.",
+            "handoff_target_unavailable",
+        ));
+    }
+    Ok(true)
+}
+
+fn target_record_path(targets_dir: &Path, session_id: &str, task_name: &str) -> PathBuf {
+    let mut digest = Sha256::new();
+    digest.update(session_id.as_bytes());
+    digest.update([0]);
+    digest.update(task_name.as_bytes());
+    targets_dir.join(format!("{}.json", hex_encode(&digest.finalize())))
 }
 
 fn sign_payload(key: &[u8; KEY_BYTES], payload: &Value) -> BridgeResult<String> {
@@ -469,6 +640,28 @@ fn cleanup_stale_prompts(prompts_dir: &Path) {
             .ok()
             .and_then(|modified| now.duration_since(modified).ok())
             .is_some_and(|age| age > Duration::from_secs(PROMPT_RETENTION_SECONDS));
+        if stale {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn cleanup_stale_targets(targets_dir: &Path) {
+    let now = SystemTime::now();
+    let Ok(entries) = fs::read_dir(targets_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let stale = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > Duration::from_secs(TARGET_RETENTION_SECONDS));
         if stale {
             let _ = fs::remove_file(path);
         }
@@ -663,7 +856,116 @@ mod tests {
                 .mode()
                 & 0o777;
             assert_eq!(key_mode, 0o600);
+            let target_path = fs::read_dir(state_dir.join("targets"))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            let target_mode = fs::metadata(target_path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(target_mode, 0o600);
         }
+        let _ = fs::remove_dir_all(state_dir);
+    }
+
+    #[test]
+    fn blocks_followups_to_registered_kimi_targets_only() {
+        let state_dir = temporary_state_dir();
+        capture_user_prompt(&user_prompt_input(), &state_dir).unwrap();
+        rewrite_pre_tool_use(&pre_tool_input(), &state_dir, 1_000)
+            .unwrap()
+            .unwrap();
+
+        for tool_name in [
+            "send_message",
+            "followup_task",
+            "collaborationsend_message",
+            "collaboration.followup_task",
+        ] {
+            let output = rewrite_pre_tool_use(
+                &json!({
+                    "hook_event_name": "PreToolUse",
+                    "session_id": "session_123",
+                    "turn_id": "later_turn",
+                    "tool_name": tool_name,
+                    "tool_input": {
+                        "target": "/root/signed_handoff_test",
+                        "message": "gAAAA_OPAQUE_PROVIDER_STATE"
+                    }
+                }),
+                &state_dir,
+                1_001,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(output["hookSpecificOutput"]["permissionDecision"], "deny");
+            assert!(
+                output["hookSpecificOutput"]["permissionDecisionReason"]
+                    .as_str()
+                    .unwrap()
+                    .contains("unsupported_cross_provider_followup")
+            );
+        }
+
+        let ordinary_target = rewrite_pre_tool_use(
+            &json!({
+                "hook_event_name": "PreToolUse",
+                "session_id": "session_123",
+                "turn_id": "later_turn",
+                "tool_name": "send_message",
+                "tool_input": {
+                    "target": "/root/ordinary_worker",
+                    "message": "visible"
+                }
+            }),
+            &state_dir,
+            1_001,
+        )
+        .unwrap();
+        assert!(ordinary_target.is_none());
+
+        let other_session = rewrite_pre_tool_use(
+            &json!({
+                "hook_event_name": "PreToolUse",
+                "session_id": "different_session",
+                "turn_id": "later_turn",
+                "tool_name": "followup_task",
+                "tool_input": {
+                    "target": "/root/signed_handoff_test",
+                    "message": "visible"
+                }
+            }),
+            &state_dir,
+            1_001,
+        )
+        .unwrap();
+        assert!(other_session.is_none());
+        let _ = fs::remove_dir_all(state_dir);
+    }
+
+    #[test]
+    fn expired_kimi_target_record_does_not_block_followups() {
+        let state_dir = temporary_state_dir();
+        capture_user_prompt(&user_prompt_input(), &state_dir).unwrap();
+        rewrite_pre_tool_use(&pre_tool_input(), &state_dir, 1_000)
+            .unwrap()
+            .unwrap();
+        let output = rewrite_pre_tool_use(
+            &json!({
+                "hook_event_name": "PreToolUse",
+                "session_id": "session_123",
+                "turn_id": "later_turn",
+                "tool_name": "send_message",
+                "tool_input": {
+                    "target": "/root/signed_handoff_test",
+                    "message": "visible"
+                }
+            }),
+            &state_dir,
+            1_000 + DEFAULT_ENVELOPE_TTL_SECONDS + 1,
+        )
+        .unwrap();
+        assert!(output.is_none());
         let _ = fs::remove_dir_all(state_dir);
     }
 

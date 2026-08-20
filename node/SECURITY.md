@@ -1,6 +1,6 @@
 # Security: Node Fallback
 
-This file applies to the separately named `codex-kimi-bridge-node 0.3.0` fallback source. The repository default is the Rust `codex-kimi-bridge` implementation described by the root security policy.
+This file applies to the separately named `codex-kimi-bridge-node 0.4.1` fallback source. The repository default is the Rust `codex-kimi-bridge` implementation described by the root security policy.
 
 ## Secret handling
 
@@ -25,9 +25,9 @@ Kimi requires `reasoning_content` to be preserved across multi-step tool calls. 
 
 ## Inter-agent metadata
 
-The `0.3.0` fallback source converts Codex `agent_message` items to upstream `user` messages. Only strictly validated `author` and `recipient` routes are retained in a fixed metadata prefix. The Responses item ID and `internal_chat_message_metadata_passthrough`, including internal turn IDs, are deliberately omitted from the upstream request. Invalid route metadata is rejected rather than sanitized into prompt text.
+The `0.4.1` fallback source converts Codex `agent_message` items to upstream `user` messages. Only strictly validated `author` and `recipient` routes are retained in a fixed metadata prefix. The Responses item ID and `internal_chat_message_metadata_passthrough`, including internal turn IDs, are deliberately omitted from the upstream request. Invalid route metadata is rejected rather than sanitized into prompt text.
 
-Unknown `agent_message.content[].encrypted_content` is opaque OpenAI provider state. Version `0.3.0` omits it and never attempts to decrypt, reinterpret, or forward it. The only accepted exception is a `CKB1` envelope that passes HMAC-SHA256, recipient, agent-type, and expiry checks using the same local key format as Rust `0.4.0`. Prompt caches and the key use private filesystem permissions, but HMAC is not encryption; do not put secrets in a task. An empty payload without a verified envelope or explicit visible-history fallback fails locally. Terminal assistant text is labeled `final_answer`; tool-progress text is labeled `commentary` for native transcript classification.
+Unknown `agent_message.content[].encrypted_content` is opaque OpenAI provider state. Version `0.4.1` omits it and never attempts to decrypt, reinterpret, or forward it. The only accepted exception is a `CKB1` envelope that passes HMAC-SHA256, recipient, agent-type, and expiry checks using the same local key format as Rust `0.4.1`. Prompt caches, hash-named target records, and the key use private filesystem permissions, but HMAC is not encryption; do not put secrets in a task. An empty initial payload without a verified envelope or explicit visible-history fallback fails locally; an opaque later follow-up receives `unsupported_cross_provider_followup`. The trusted hook denies `send_message` / `followup_task` to registered Kimi targets before delivery. Terminal assistant text is labeled `final_answer`; tool-progress text is labeled `commentary` for native transcript classification.
 
 ## Reporting
 

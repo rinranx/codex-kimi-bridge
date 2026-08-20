@@ -2,9 +2,9 @@
 
 [简体中文](INSTALL-GUIDE.zh-CN.md) | **English**
 
-This guide installs the default single-binary Rust implementation, `codex-kimi-bridge 0.4.0`. New users do not need Rust, Node.js, or npm. The Node implementation remains only as a fallback under [`node/`](../node/).
+This guide installs the default single-binary Rust implementation, `codex-kimi-bridge 0.4.1`. New users do not need Rust, Node.js, or npm. The Node implementation remains only as a fallback under [`node/`](../node/).
 
-> The current stable release is `v0.4.0`. Download and verify only that version's GitHub Release; do not substitute `main/downloads`, a similarly named package, or an older build.
+> The current stable release is `v0.4.1`. Download and verify only that version's GitHub Release; do not substitute `main/downloads`, a similarly named package, or an older build.
 
 ## 1. Requirements
 
@@ -14,12 +14,12 @@ You need macOS, Codex Desktop, a Kimi Code membership key or Kimi API Open Platf
 
 Download the recommended kit:
 
-<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-install-kit-0.4.0.zip>
+<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-install-kit-0.4.1.zip>
 
-Download [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/INSTALL-KIT-SHA256.txt) from the same Release and compare it:
+Download [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/INSTALL-KIT-SHA256.txt) from the same Release and compare it:
 
 ```sh
-shasum -a 256 codex-kimi-bridge-macos-install-kit-0.4.0.zip
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.4.1.zip
 ```
 
 This release is not Apple-notarized. After verifying the checksum, you may need to right-click a `.command` file and choose Open.
@@ -51,7 +51,7 @@ Verify it:
 $HOME/.local/bin/codex-kimi-bridge --version
 ```
 
-Expected: `0.4.0`.
+Expected: `0.4.1`.
 
 Optionally add this line to `~/.zprofile` and open a new terminal:
 
@@ -194,9 +194,9 @@ $HOME/.local/bin/codex-kimi-bridge hooks status --json
 The installer merges only two marked hook entries into `~/.codex/hooks.json`, preserves unrelated hooks, and creates a timestamped backup before changing an existing file. Quit and reopen Codex Desktop, enter `/hooks`, then review and trust:
 
 - `UserPromptSubmit` → `codex-kimi-bridge hook user-prompt-submit`
-- `PreToolUse`, strictly matching `Agent`, `spawn_agent`, Multi-Agent V2's `collaborationspawn_agent`, or `collaboration.spawn_agent` compatibility forms → `codex-kimi-bridge hook pre-tool-use`
+- `PreToolUse`, strictly matching ordinary, flattened, and separator-based names for initial spawn plus `send_message` / `followup_task` → `codex-kimi-bridge hook pre-tool-use`
 
-Do not bypass hook trust. Visible tasks are cached with mode `0600` under `~/Library/Caches/codex-kimi-bridge/handoff-v1` and cleaned after 24 hours. A `CKB1` envelope uses HMAC-SHA256 to authenticate source, integrity, recipient, and lifetime; it is not confidential encryption. Never put an API key, password, or other secret in a task.
+Do not bypass hook trust. Visible tasks and hash-named Kimi-target registrations are cached with mode `0600` under the mode-`0700` directory `~/Library/Caches/codex-kimi-bridge/handoff-v1`; registrations expire after six hours and stale files are cleaned after 24 hours. A `CKB1` envelope uses HMAC-SHA256 to authenticate source, integrity, recipient, and lifetime; it is not confidential encryption. Never put an API key, password, or other secret in a task.
 
 Run `codex-kimi-bridge hooks uninstall` to remove only this project's two marked commands.
 
@@ -259,7 +259,7 @@ curl -s http://127.0.0.1:8787/health
 $HOME/.local/bin/codex-kimi-bridge doctor --json
 ```
 
-Health should identify `service: codex-kimi-bridge`, `implementation: rust`, and version `0.4.0`. The default doctor command does not contact Kimi. Only with explicit consent to consume a small amount of quota, run:
+Health should identify `service: codex-kimi-bridge`, `implementation: rust`, and version `0.4.1`. The default doctor command does not contact Kimi. Only with explicit consent to consume a small amount of quota, run:
 
 ```sh
 $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
@@ -276,7 +276,8 @@ Put the complete task, input locations, output requirements, and stop condition 
 ```
 
 2. Spawn `kimi_frontend` with `fork_turns = "none"`. The trusted `PreToolUse` hook signs the marked task and binds it to that child's `task_name`.
-3. Let Kimi return an ordinary final answer. Do not use cross-provider `send_message` or `followup_task` for task/result text.
+3. After the child starts, use only `wait_agent` and let Kimi return an ordinary final answer automatically. Do not call `send_message` or `followup_task` on the running Kimi child; version `0.4.1` denies those calls for a registered Kimi target before delivery.
+4. To add instructions, submit a new complete visible `[KIMI_TASK]` and create a newly named `kimi_frontend`; do not follow up on the old child.
 
 You can send: “`[KIMI_TASK]` (put the complete task here) `[/KIMI_TASK]`; spawn `kimi_frontend` with `fork_turns=none` and wait for its ordinary final answer.”
 
@@ -290,8 +291,9 @@ If hooks are unavailable, an explicit `[KIMI_TASK]` in completed history plus th
 - **macOS blocks the launcher:** verify SHA-256, then right-click and choose Open.
 - **401 / missing_api_key:** inspect the Keychain service name and provider auth command without displaying the secret.
 - **Model access error:** update all three agent model fields for your membership and create a new task.
-- **The child runs but Kimi progress is not visible:** confirm `0.4.0` Responses assistant messages include `phase`; terminal text must be `final_answer` and tool-progress text `commentary`. Older builds omitted this field. Do not patch the Desktop app.
-- **`missing_handoff_envelope` / Kimi reports an empty payload:** require version `0.4.0`, run `hooks status --json`, and confirm both commands are trusted in Desktop `/hooks`. Never bypass verification by forwarding raw provider ciphertext.
+- **The child runs but Kimi progress is not visible:** confirm `0.4.1` Responses assistant messages include `phase`; terminal text must be `final_answer` and tool-progress text `commentary`. Older builds omitted this field. Do not patch the Desktop app.
+- **Initial `missing_handoff_envelope` / empty payload:** require version `0.4.1`, run `hooks status --json`, and confirm both commands are trusted in Desktop `/hooks`. Never bypass verification by forwarding raw provider ciphertext.
+- **`unsupported_cross_provider_followup`:** the parent sent an opaque provider-private follow-up to an existing Kimi child. Stop retrying and wait for automatic completion. If new content is necessary, submit a new visible `[KIMI_TASK]` and create a new child. If the bridge emitted this instead of the hook denying the tool, rerun `hooks install`, restart Desktop, and review/trust the updated hook.
 - **LaunchAgent did not start:** run `launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"` and inspect `~/Library/Logs/codex-kimi-bridge.error.log`.
 - **LaunchAgent restarts repeatedly:** port 8787 is usually occupied. Identify the owner first; never terminate an unknown process.
 - **Rust compatibility problem:** stop Rust and follow [`node/install/INSTALL-GUIDE.en.md`](../node/install/INSTALL-GUIDE.en.md) for the separately named Node fallback.

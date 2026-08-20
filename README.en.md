@@ -15,12 +15,12 @@ Rust is the default implementation starting with `0.2.0-alpha.1`. Users do not n
 ## Downloads
 
 - Project: <https://github.com/rinranx/codex-kimi-bridge>
-- Current release: [`v0.4.0`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.0)
-- Version `0.4.0` adds user-trusted Codex hooks, locally signed task envelopes, fail-closed verification, and native subagent message phases
-- Recommended universal macOS kit (Apple Silicon + Intel): <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-install-kit-0.4.0.zip>
-- Apple Silicon binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-arm64-0.4.0.tar.gz>
-- Intel Mac binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-x86_64-0.4.0.tar.gz>
-- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/SHA256SUMS.txt>
+- Current release: [`v0.4.1`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.1)
+- Version `0.4.1` adds active-Kimi follow-up protection and dedicated error classification on top of signed handoff and native message phases
+- Recommended universal macOS kit (Apple Silicon + Intel): <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-install-kit-0.4.1.zip>
+- Apple Silicon binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-arm64-0.4.1.tar.gz>
+- Intel Mac binary: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-x86_64-0.4.1.tar.gz>
+- SHA-256 checksums: <https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/SHA256SUMS.txt>
 
 Build artifacts are published only to versioned GitHub Releases; files under `main/downloads` are no longer overwritten. The current macOS binaries are not Apple-notarized. macOS may require you to right-click a `.command` file and choose Open the first time. Verify SHA-256 before installation.
 
@@ -132,7 +132,7 @@ If `[agents]` defines `max_concurrent_threads_per_session`, that Codex-wide limi
 
 ### Native Desktop subagents and `agent_message`
 
-Version `0.4.0` supports the Responses `agent_message` item emitted by Codex Desktop without attempting to break OpenAI provider-private state. Version `0.3.4` safely filters ciphertext but still depends on unreliable visible history. Version `0.4.0` instead uses the official Codex hook lifecycle to create a verifiable local handoff before the task enters cross-provider private wrapping.
+Version `0.4.0` supports the Responses `agent_message` item emitted by Codex Desktop without attempting to break OpenAI provider-private state. Version `0.3.4` safely filters ciphertext but still depends on unreliable visible history. Version `0.4.0` instead uses the official Codex hook lifecycle to create a verifiable local handoff before the task enters cross-provider private wrapping. Version `0.4.1` additionally protects long-running work: after a valid initial handoff, it temporarily registers that Kimi target and denies an accidental `send_message` or `followup_task` before delivery, preventing an opaque follow-up from terminating the active Kimi turn.
 
 The mapping is explicit and minimal:
 
@@ -147,17 +147,17 @@ The mapping is explicit and minimal:
 
 #### Install and trust the local handoff hooks
 
-After installing the `0.4.0` binary, run:
+After installing the `0.4.1` binary, run:
 
 ```sh
 codex-kimi-bridge hooks install
 codex-kimi-bridge hooks status --json
 ```
 
-The installer merges into `~/.codex/hooks.json`, preserves unrelated hooks, and creates a timestamped backup before changing an existing file. This follows the [official Codex Hooks interface](https://learn.chatgpt.com/docs/hooks): a supported `PreToolUse` hook can rewrite the call through `updatedInput`. Current Codex Multi-Agent V2 hook input normalizes the namespaced tool to `collaborationspawn_agent` (see [OpenAI Codex #33284](https://github.com/openai/codex/issues/33284)); other paths may report `Agent`, `spawn_agent`, or `collaboration.spawn_agent`. The installer therefore uses the strict allowlist matcher `^(Agent|spawn_agent|collaborationspawn_agent|collaboration[.:_]+spawn_agent)$`. Quit and reopen Codex Desktop, enter `/hooks`, then review and trust both commands:
+The installer merges into `~/.codex/hooks.json`, preserves unrelated hooks, and creates a timestamped backup before changing an existing file. This follows the [official Codex Hooks interface](https://learn.chatgpt.com/docs/hooks): a supported `PreToolUse` hook can rewrite or deny a call. Current Codex Multi-Agent V2 hook input may normalize namespaced tools by removing their separator (see [OpenAI Codex #33284](https://github.com/openai/codex/issues/33284)). The strict matcher therefore covers `Agent`, `spawn_agent`, `send_message`, `followup_task`, and their flattened or separator-based `collaboration` forms. Quit and reopen Codex Desktop, enter `/hooks`, then review and trust both commands:
 
 - `UserPromptSubmit` temporarily stores the current visible user request in a user-private cache
-- `PreToolUse`, matching `Agent`, `spawn_agent`, V2's `collaborationspawn_agent`, and separator-based compatibility names, rewrites only `agent_type = "kimi_frontend"` calls into a locally signed envelope and sets `fork_turns` to `"none"`
+- `PreToolUse` rewrites only an initial `agent_type = "kimi_frontend"` call into a locally signed envelope with `fork_turns = "none"`; it also denies only `send_message` or `followup_task` calls targeting a Kimi child registered by that same parent session, leaving other agent calls untouched
 
 Wrap the exact Kimi task in `[KIMI_TASK]` and `[/KIMI_TASK]` when precision matters. Without markers, the whole visible user request is used. Other agent calls are untouched. Remove only this project's managed hooks with:
 
@@ -165,11 +165,11 @@ Wrap the exact Kimi task in `[KIMI_TASK]` and `[/KIMI_TASK]` when precision matt
 codex-kimi-bridge hooks uninstall
 ```
 
-If the hooks are absent or untrusted, the prompt cache is missing, the signature fails, the envelope expires, or the recipient does not match, version `0.4.0` fails before contacting Kimi. A positive `fork_turns` value with an explicit `[KIMI_TASK]` in completed history remains a compatibility fallback, not the default path.
+If the hooks are absent or untrusted, the prompt cache is missing, the signature fails, the envelope expires, or the recipient does not match, the bridge fails before contacting Kimi. Version `0.4.1` reports an empty initial task as `missing_handoff_envelope` and a later unreadable empty message as `unsupported_cross_provider_followup`. A positive `fork_turns` value with an explicit `[KIMI_TASK]` in completed history remains a compatibility fallback, not the default path.
 
-The local envelope authenticates integrity and source; it does not encrypt for confidentiality. Visible prompts are temporarily stored with mode `0600` under `~/Library/Caches/codex-kimi-bridge/handoff-v1` and cleaned after 24 hours. The signing key is also readable only by the current macOS user. Never put an API key, password, or other secret in a handoff task.
+The local envelope authenticates integrity and source; it does not encrypt for confidentiality. Visible prompts and hash-named Kimi-target registrations are stored with mode `0600` under the mode-`0700` directory `~/Library/Caches/codex-kimi-bridge/handoff-v1`. Envelopes and target registrations expire after six hours; stale files are cleaned after 24 hours. The signing key is also readable only by the current macOS user. Never put an API key, password, or other secret in a handoff task.
 
-The request remains on the native Codex `spawn_agent` path. Desktop still owns thread IDs, status, result delivery, and the panel; the bridge only converts protocol items and supplies standard message classification. Version `0.4.0` passed one user-authorized real Desktop acceptance check documented in [`compat/AGENT-MESSAGE-INTEGRATION.md`](compat/AGENT-MESSAGE-INTEGRATION.md).
+The request remains on the native Codex `spawn_agent` path. Desktop still owns thread IDs, status, result delivery, and the panel; the bridge only converts protocol items and supplies standard message classification. Version `0.4.0` passed one user-authorized real Desktop acceptance check documented in [`compat/AGENT-MESSAGE-INTEGRATION.md`](compat/AGENT-MESSAGE-INTEGRATION.md); version `0.4.1` still requires that document's long-task and follow-up-guard release gate.
 
 ## Codex provider configuration
 
@@ -266,7 +266,7 @@ command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"
 args = []
 ```
 
-The bridge maps `xhigh` to Kimi K3 `max`. The template retains `multi_agent_v2`; a trusted hook hands the task off by default, and ordinary final-result delivery returns it automatically. Cross-provider `send_message` and `followup_task` remain unreliable body channels, and recursive subagents remain experimental. You may customize the role, but keep `sandbox_mode = "read-only"` and the read-only instruction when Kimi should only advise.
+The bridge maps `xhigh` to Kimi K3 `max`. The template retains `multi_agent_v2`; a trusted hook hands the task off by default, and ordinary final-result delivery returns it automatically. After the child starts, the parent must use only `wait_agent`, never `send_message` or `followup_task` on the running Kimi child; version `0.4.1` proactively denies those calls for registered targets. To add instructions, submit a new visible `[KIMI_TASK]` and create a newly named Kimi child. Recursive subagents remain experimental. You may customize the role, but keep `sandbox_mode = "read-only"` and the read-only instruction when Kimi should only advise.
 
 ## Choose a Kimi Code model by membership tier
 
@@ -320,7 +320,7 @@ codex-kimi-bridge serve \
   --model kimi-k3
 ```
 
-Open Platform remains an advanced route in `0.4.0`. Release validation primarily uses a Kimi Code membership key.
+Open Platform remains an advanced route in `0.4.1`. Release validation primarily uses a Kimi Code membership key.
 
 ## Store or replace the API key
 
@@ -391,8 +391,9 @@ The shared compatibility fixture is [`compat/responses-request.json`](compat/res
 ## Known boundaries
 
 - Responses `function` and `custom` tools are translated safely at the top level and inside `namespace`; other hosted tools fail explicitly
-- Version `0.4.0` requires the user to review, trust, and enable two Codex hooks; without effective hooks, an empty task fails before Kimi is contacted
+- Version `0.4.1` requires the user to review, trust, and enable the two updated Codex hooks; without effective hooks, an empty task fails before Kimi is contacted and active-child follow-ups cannot be blocked before delivery
 - Hooks can capture only visible user requests and cannot decrypt OpenAI provider-private state; `[KIMI_TASK]` precisely limits the handoff body
+- Use only `wait_agent` for an active Kimi child. A `send_message` or `followup_task` body may exist only inside OpenAI-private ciphertext, so version `0.4.1` rejects it instead of guessing or replaying an old task
 - `previous_response_id` is unsupported; callers must send full conversation items
 - `parallel_tool_calls` is not forwarded
 - Reasoning state exists only in the current process; start a new subagent task after a mid-chain restart

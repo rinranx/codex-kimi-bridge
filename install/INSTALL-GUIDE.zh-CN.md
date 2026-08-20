@@ -2,9 +2,9 @@
 
 **简体中文** | [English](INSTALL-GUIDE.en.md)
 
-本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.4.0`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
+本指南安装默认的 Rust 单文件版 `codex-kimi-bridge 0.4.1`。新用户不需要安装 Rust、Node.js 或 npm。Node 版仅作为 [`node/`](../node/) 中的备用实现。
 
-> 当前稳定版为 `v0.4.0`。只从该版本的 GitHub Release 下载并核对校验文件，不要用 `main/downloads`、相似名称的软件包或旧版代替。
+> 当前稳定版为 `v0.4.1`。只从该版本的 GitHub Release 下载并核对校验文件，不要用 `main/downloads`、相似名称的软件包或旧版代替。
 
 ## 1. 准备
 
@@ -20,12 +20,12 @@
 
 推荐下载：
 
-<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/codex-kimi-bridge-macos-install-kit-0.4.0.zip>
+<https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/codex-kimi-bridge-macos-install-kit-0.4.1.zip>
 
-同时下载同一 Release 中的 [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.0/INSTALL-KIT-SHA256.txt)，然后在终端进入下载目录运行：
+同时下载同一 Release 中的 [`INSTALL-KIT-SHA256.txt`](https://github.com/rinranx/codex-kimi-bridge/releases/download/v0.4.1/INSTALL-KIT-SHA256.txt)，然后在终端进入下载目录运行：
 
 ```sh
-shasum -a 256 codex-kimi-bridge-macos-install-kit-0.4.0.zip
+shasum -a 256 codex-kimi-bridge-macos-install-kit-0.4.1.zip
 ```
 
 输出应与校验文件完全一致。本版本尚未做 Apple 公证；首次打开 `.command` 时，可能需要右键文件并选择“打开”。
@@ -68,7 +68,7 @@ $HOME/.local/bin/codex-kimi-bridge --version
 预期输出：
 
 ```text
-0.4.0
+0.4.1
 ```
 
 如果希望在任意终端直接输入命令，可把下面一行加入 `~/.zprofile`，再新开终端：
@@ -216,9 +216,9 @@ $HOME/.local/bin/codex-kimi-bridge hooks status --json
 安装器只合并两条带项目标记的 Hook，保留 `~/.codex/hooks.json` 里已有的其他内容；修改现有文件前会创建时间戳备份。随后完全退出并重新打开 Codex Desktop，输入 `/hooks`，检查并信任：
 
 - `UserPromptSubmit` → `codex-kimi-bridge hook user-prompt-submit`
-- `PreToolUse`（严格匹配 `Agent`、`spawn_agent`、Multi-Agent V2 的 `collaborationspawn_agent` 或 `collaboration.spawn_agent` 兼容形式）→ `codex-kimi-bridge hook pre-tool-use`
+- `PreToolUse`（严格匹配初始 spawn 与 `send_message`／`followup_task` 的普通、扁平化及带分隔符名称）→ `codex-kimi-bridge hook pre-tool-use`
 
-不要绕过 Hook 信任。可见任务会以权限 `0600` 暂存在 `~/Library/Caches/codex-kimi-bridge/handoff-v1`，24 小时后清理。`CKB1` 信封使用 HMAC-SHA256 验证来源、完整性、收件任务与有效期，但不提供加密保密；不要在任务里放 API Key、密码或其他秘密。
+不要绕过 Hook 信任。可见任务和哈希命名的 Kimi 目标登记会以权限 `0600` 暂存在权限为 `0700` 的 `~/Library/Caches/codex-kimi-bridge/handoff-v1`；登记六小时失效，陈旧文件 24 小时后清理。`CKB1` 信封使用 HMAC-SHA256 验证来源、完整性、收件任务与有效期，但不提供加密保密；不要在任务里放 API Key、密码或其他秘密。
 
 要移除时运行 `codex-kimi-bridge hooks uninstall`；它只移除本项目标记的两条命令。
 
@@ -296,7 +296,7 @@ $HOME/.local/bin/codex-kimi-bridge doctor --json
 健康信息应包含：
 
 ```json
-{"service":"codex-kimi-bridge","implementation":"rust","version":"0.4.0"}
+{"service":"codex-kimi-bridge","implementation":"rust","version":"0.4.1"}
 ```
 
 `doctor --json` 不会联系 Kimi。只有明确愿意消耗少量额度时才运行：
@@ -316,7 +316,8 @@ $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 ```
 
 2. 主代理创建 `kimi_frontend` 时使用 `fork_turns = "none"`。已获信任的 `PreToolUse` Hook 会把当前标记任务签名并绑定到该子代理的 `task_name`。
-3. 让 Kimi 以普通最终答案返回，不要用 `send_message` 或 `followup_task` 跨 Provider 传正文。
+3. 子代理启动后，主代理只使用 `wait_agent` 等待，并让 Kimi 以普通最终答案自动返回；不要对运行中的 Kimi 使用 `send_message` 或 `followup_task`。`0.4.1` 会提前拒绝发往已登记 Kimi 目标的这两种追发。
+4. 需要补充指令时，重新发送一条完整、可见的 `[KIMI_TASK]`，再创建一个新名称的 `kimi_frontend`；不要把旧任务追发给原子代理。
 
 可以直接发送：“`[KIMI_TASK]`（这里写完整任务）`[/KIMI_TASK]`；请以 `fork_turns=none` 创建 `kimi_frontend`，等待它的普通最终答案。”
 
@@ -330,8 +331,9 @@ $HOME/.local/bin/codex-kimi-bridge doctor --live --json --model k3
 - **macOS 阻止打开**：先核对 SHA-256，再右键 `.command` 选择“打开”。
 - **401／missing_api_key**：检查 Keychain 服务名和 provider 的 auth 命令，不要输出 Key 本身。
 - **模型无权限**：按会员等级同时修改子代理的三项模型配置；新建任务后重试。
-- **子代理能运行但看不到 Kimi 过程消息**：确认 `0.4.0` 响应的助手消息含 `phase`，终止文本为 `final_answer`、工具过程为 `commentary`；旧版缺少该字段。不要修改 Desktop 应用本体。
-- **`missing_handoff_envelope`／Kimi 提示 Payload 为空**：确认运行版本为 `0.4.0`，运行 `hooks status --json`，并在 Desktop `/hooks` 中确认两条命令已获信任。不要转发原始密文规避验签。
+- **子代理能运行但看不到 Kimi 过程消息**：确认 `0.4.1` 响应的助手消息含 `phase`，终止文本为 `final_answer`、工具过程为 `commentary`；旧版缺少该字段。不要修改 Desktop 应用本体。
+- **初始任务出现 `missing_handoff_envelope`／Payload 为空**：确认运行版本为 `0.4.1`，运行 `hooks status --json`，并在 Desktop `/hooks` 中确认两条命令已获信任。不要转发原始密文规避验签。
+- **出现 `unsupported_cross_provider_followup`**：主代理向已运行的 Kimi 追发了不可解密的 Provider 私有消息。停止重试，只等待原任务自动完成；若确需补充内容，发送新的可见 `[KIMI_TASK]` 并创建新子代理。若错误来自桥接而不是 Hook 拒绝，重新运行 `hooks install`、重启 Desktop 并审核信任更新后的 Hook。
 - **LaunchAgent 未启动**：运行 `launchctl print "gui/$(id -u)/io.github.rinranx.codex-kimi-bridge"`，并查看 `~/Library/Logs/codex-kimi-bridge.error.log`。
 - **LaunchAgent 反复重启**：通常是 8787 被其他程序占用。先识别占用者，不要直接结束未知进程。
 - **Rust 兼容问题**：停止 Rust 版后，按 [`node/install/INSTALL-GUIDE.zh-CN.md`](../node/install/INSTALL-GUIDE.zh-CN.md) 安装不同命令名的 Node 回退版。

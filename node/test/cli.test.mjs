@@ -8,7 +8,7 @@ test("supports --version", async () => {
   const io = memoryIo();
   const code = await runCli(["--version"], io);
   assert.equal(code, 0);
-  assert.equal(io.output(), "0.3.0\n");
+  assert.equal(io.output(), "0.4.1\n");
 });
 
 test("supports global --json before translate-request", async () => {

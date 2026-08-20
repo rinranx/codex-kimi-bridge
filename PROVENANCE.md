@@ -1,6 +1,6 @@
 # Provenance
 
-The current source tree is the unreleased `codex-kimi-bridge 0.4.0` candidate, a Rust implementation created in 2026 in a local OpenAI Codex workspace. The latest published binary remains `0.3.0`.
+This source tree contains `codex-kimi-bridge 0.4.1`, a Rust implementation created in 2026 in a local OpenAI Codex workspace. Published binaries are distributed only through immutable versioned Git tags and GitHub Releases.
 
 - The protocol behavior is based on the official OpenAI Responses and Kimi API/Kimi Code documentation.
 - Rust dependencies are declared in [`rust/Cargo.toml`](rust/Cargo.toml) and pinned in [`rust/Cargo.lock`](rust/Cargo.lock).

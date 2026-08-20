@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -64,6 +64,8 @@ test("signs, verifies, and translates a local Kimi handoff", () => {
     assert.equal(upstream.includes(ENVELOPE_PREFIX), false);
     assert.equal(upstream.includes("encrypted_content"), false);
     assert.equal(statSync(join(stateDir, "handoff.key")).mode & 0o777, 0o600);
+    const targetRecord = readdirSync(join(stateDir, "targets"))[0];
+    assert.equal(statSync(join(stateDir, "targets", targetRecord)).mode & 0o777, 0o600);
 
     const tampered = `${envelope.slice(0, -1)}${envelope.endsWith("0") ? "1" : "0"}`;
     assert.throws(
@@ -82,6 +84,7 @@ test("denies a Kimi spawn when no visible prompt was captured", () => {
       hook_event_name: "PreToolUse",
       session_id: "session_node",
       turn_id: "turn_node",
+      tool_name: "spawn_agent",
       tool_input: {
         agent_type: "kimi_frontend",
         task_name: "missing_prompt",
@@ -103,6 +106,7 @@ test("does not rewrite non-Kimi Agent calls", () => {
     hook_event_name: "PreToolUse",
     session_id: "session_node",
     turn_id: "turn_node",
+    tool_name: "spawn_agent",
     tool_input: {
       agent_type: "worker",
       task_name: "ordinary_worker",
@@ -119,6 +123,7 @@ test("an explicit marked tool task supports recursive handoff without a prompt c
       hook_event_name: "PreToolUse",
       session_id: "session_recursive",
       turn_id: "turn_recursive",
+      tool_name: "spawn_agent",
       tool_input: {
         agent_type: "kimi_frontend",
         task_name: "recursive_kimi",
@@ -135,6 +140,72 @@ test("an explicit marked tool task supports recursive handoff without a prompt c
       ),
       "Return KIMI_NODE_RECURSIVE_OK.",
     );
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("blocks followups to registered Kimi targets only", () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "codex-kimi-node-handoff-"));
+  try {
+    captureUserPrompt({
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session_followup",
+      turn_id: "turn_spawn",
+      prompt: "[KIMI_TASK]\nReview once.\n[/KIMI_TASK]",
+    }, stateDir);
+    rewritePreToolUse({
+      hook_event_name: "PreToolUse",
+      session_id: "session_followup",
+      turn_id: "turn_spawn",
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "kimi_frontend",
+        task_name: "registered_kimi",
+        message: "gAAAA",
+      },
+    }, stateDir, 1_000);
+
+    for (const toolName of [
+      "send_message",
+      "followup_task",
+      "collaborationsend_message",
+      "collaboration.followup_task",
+    ]) {
+      const output = rewritePreToolUse({
+        hook_event_name: "PreToolUse",
+        session_id: "session_followup",
+        turn_id: "turn_later",
+        tool_name: toolName,
+        tool_input: {
+          target: "/root/registered_kimi",
+          message: "gAAAA_OPAQUE_PROVIDER_STATE",
+        },
+      }, stateDir, 1_001);
+      assert.equal(output.hookSpecificOutput.permissionDecision, "deny");
+      assert.match(
+        output.hookSpecificOutput.permissionDecisionReason,
+        /unsupported_cross_provider_followup/,
+      );
+    }
+
+    const ordinary = rewritePreToolUse({
+      hook_event_name: "PreToolUse",
+      session_id: "session_followup",
+      turn_id: "turn_later",
+      tool_name: "send_message",
+      tool_input: { target: "/root/ordinary_worker", message: "visible" },
+    }, stateDir, 1_001);
+    assert.equal(ordinary, null);
+
+    const otherSession = rewritePreToolUse({
+      hook_event_name: "PreToolUse",
+      session_id: "different_session",
+      turn_id: "turn_later",
+      tool_name: "followup_task",
+      tool_input: { target: "/root/registered_kimi", message: "visible" },
+    }, stateDir, 1_001);
+    assert.equal(otherSession, null);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }

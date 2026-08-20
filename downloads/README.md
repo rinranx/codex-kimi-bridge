@@ -2,16 +2,16 @@
 
 Built archives and checksums are no longer stored or overwritten on `main`.
 
-Download the current release from [`v0.4.0`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.0). Every archive has a versioned filename and is attached to its matching Git tag and GitHub Release.
+Download the current release from [`v0.4.1`](https://github.com/rinranx/codex-kimi-bridge/releases/tag/v0.4.1). Every archive has a versioned filename and is attached to its matching Git tag and GitHub Release.
 
 Available assets:
 
 | File | Use |
 | --- | --- |
-| `codex-kimi-bridge-macos-install-kit-0.4.0.zip` | Recommended universal kit for Apple Silicon and Intel Macs |
-| `codex-kimi-bridge-macos-arm64-0.4.0.tar.gz` | Apple Silicon standalone binary package |
-| `codex-kimi-bridge-macos-x86_64-0.4.0.tar.gz` | Intel Mac standalone binary package |
-| `codex-kimi-bridge-node-0.3.0.tgz` | Separately named Node fallback; not the default |
+| `codex-kimi-bridge-macos-install-kit-0.4.1.zip` | Recommended universal kit for Apple Silicon and Intel Macs |
+| `codex-kimi-bridge-macos-arm64-0.4.1.tar.gz` | Apple Silicon standalone binary package |
+| `codex-kimi-bridge-macos-x86_64-0.4.1.tar.gz` | Intel Mac standalone binary package |
+| `codex-kimi-bridge-node-0.4.1.tgz` | Separately named Node fallback; not the default |
 | `SHA256SUMS.txt` | Checksums for every packaged artifact |
 | `INSTALL-KIT-SHA256.txt` | Checksum for the recommended universal kit |
 

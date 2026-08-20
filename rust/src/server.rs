@@ -743,7 +743,7 @@ mod tests {
         );
         assert_eq!(
             captured[0].user_agent.as_deref(),
-            Some("codex-kimi-bridge/0.4.0")
+            Some("codex-kimi-bridge/0.4.1")
         );
         assert_eq!(
             captured[0].body["messages"][0]["content"],

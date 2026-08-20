@@ -1,4 +1,5 @@
 import {
+  createHash,
   createHmac,
   randomBytes,
   randomUUID,
@@ -32,6 +33,8 @@ const DEFAULT_ENVELOPE_TTL_SECONDS = 6 * 60 * 60;
 const MAX_ENVELOPE_TTL_SECONDS = 24 * 60 * 60;
 const MAX_CLOCK_SKEW_SECONDS = 5 * 60;
 const PROMPT_RETENTION_MS = 24 * 60 * 60 * 1000;
+const TARGET_RETENTION_MS = 24 * 60 * 60 * 1000;
+const TARGET_RECORD_VERSION = 1;
 const TARGET_AGENT_TYPE = "kimi_frontend";
 const TASK_OPEN = "[KIMI_TASK]";
 const TASK_CLOSE = "[/KIMI_TASK]";
@@ -181,6 +184,23 @@ export function rewritePreToolUse(
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return null;
   }
+  if (isFollowupTool(object.tool_name)) {
+    if (typeof toolInput.target !== "string") {
+      return null;
+    }
+    try {
+      const sessionId = hookIdentifier(object, "session_id");
+      if (isRegisteredKimiTarget(stateDir, sessionId, toolInput.target, now)) {
+        return deniedCrossProviderFollowupOutput();
+      }
+      return null;
+    } catch {
+      return deniedFollowupGuardUnavailableOutput();
+    }
+  }
+  if (!isSpawnTool(object.tool_name)) {
+    return null;
+  }
   if (toolInput.agent_type !== TARGET_AGENT_TYPE) {
     return null;
   }
@@ -250,11 +270,131 @@ function rewriteKimiAgentCall(hook, toolInput, stateDir, now) {
     expires_at: now + DEFAULT_ENVELOPE_TTL_SECONDS,
     task,
   };
+  const envelope = signPayload(key, payload);
+  registerKimiTarget(stateDir, sessionId, toolInput.task_name, now);
   return {
     ...toolInput,
-    message: signPayload(key, payload),
+    message: envelope,
     fork_turns: "none",
   };
+}
+
+function deniedCrossProviderFollowupOutput() {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason:
+        "[unsupported_cross_provider_followup] codex-kimi-bridge blocked a follow-up to a running Kimi subagent because Codex would wrap it in provider-private encrypted state. Wait for automatic completion. For new instructions, submit a new visible [KIMI_TASK] and create a new Kimi subagent. The target was not contacted.",
+    },
+  };
+}
+
+function deniedFollowupGuardUnavailableOutput() {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason:
+        "[kimi_followup_guard_unavailable] codex-kimi-bridge could not verify whether this target is a Kimi subagent, so the follow-up was blocked safely. The target was not contacted.",
+    },
+  };
+}
+
+function isSpawnTool(toolName) {
+  return ["agent", "spawnagent", "collaborationspawnagent"]
+    .includes(normalizedToolName(toolName));
+}
+
+function isFollowupTool(toolName) {
+  return [
+    "sendmessage",
+    "followuptask",
+    "collaborationsendmessage",
+    "collaborationfollowuptask",
+  ].includes(normalizedToolName(toolName));
+}
+
+function normalizedToolName(toolName) {
+  return typeof toolName === "string"
+    ? toolName.replace(/[^A-Za-z0-9]/g, "").toLowerCase()
+    : "";
+}
+
+function registerKimiTarget(stateDir, sessionId, taskName, now) {
+  const targetsDir = join(stateDir, "targets");
+  ensurePrivateDirectory(stateDir);
+  ensurePrivateDirectory(targetsDir);
+  cleanupStaleTargets(targetsDir);
+  const record = {
+    version: TARGET_RECORD_VERSION,
+    session_id: sessionId,
+    task_name: taskName,
+    created_at: now,
+    expires_at: now + DEFAULT_ENVELOPE_TTL_SECONDS,
+  };
+  writePrivateAtomic(
+    targetRecordPath(targetsDir, sessionId, taskName),
+    JSON.stringify(record),
+  );
+}
+
+function isRegisteredKimiTarget(stateDir, sessionId, target, now) {
+  const taskName = target.split("/").at(-1);
+  if (!safeIdentifier(taskName, 256)) {
+    return false;
+  }
+  const path = targetRecordPath(join(stateDir, "targets"), sessionId, taskName);
+  if (!existsSync(path)) {
+    return false;
+  }
+  let record;
+  try {
+    record = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    throw handoffError(
+      "The local Kimi target record could not be read.",
+      "handoff_target_unavailable",
+    );
+  }
+  const matchesTarget = record &&
+    typeof record === "object" &&
+    !Array.isArray(record) &&
+    record.version === TARGET_RECORD_VERSION &&
+    record.session_id === sessionId &&
+    record.task_name === taskName &&
+    Number.isSafeInteger(record.created_at) &&
+    Number.isSafeInteger(record.expires_at);
+  if (!matchesTarget) {
+    throw handoffError(
+      "The local Kimi target record is invalid.",
+      "handoff_target_unavailable",
+    );
+  }
+  if (record.expires_at < now) {
+    rmSync(path, { force: true });
+    return false;
+  }
+  if (
+    record.created_at > now + MAX_CLOCK_SKEW_SECONDS ||
+    record.expires_at <= record.created_at ||
+    record.expires_at - record.created_at > MAX_ENVELOPE_TTL_SECONDS
+  ) {
+    throw handoffError(
+      "The local Kimi target record timing is invalid.",
+      "handoff_target_unavailable",
+    );
+  }
+  return true;
+}
+
+function targetRecordPath(targetsDir, sessionId, taskName) {
+  const digest = createHash("sha256")
+    .update(sessionId)
+    .update("\0")
+    .update(taskName)
+    .digest("hex");
+  return join(targetsDir, `${digest}.json`);
 }
 
 function signPayload(key, payload) {
@@ -367,6 +507,23 @@ function cleanupStalePrompts(promptsDir) {
       }
       const path = join(promptsDir, name);
       if (now - statSync(path).mtimeMs > PROMPT_RETENTION_MS) {
+        rmSync(path, { force: true });
+      }
+    }
+  } catch {
+    // Cleanup is best-effort and must not block a valid handoff.
+  }
+}
+
+function cleanupStaleTargets(targetsDir) {
+  const now = Date.now();
+  try {
+    for (const name of readdirSync(targetsDir)) {
+      if (!name.endsWith(".json")) {
+        continue;
+      }
+      const path = join(targetsDir, name);
+      if (now - statSync(path).mtimeMs > TARGET_RETENTION_MS) {
         rmSync(path, { force: true });
       }
     }

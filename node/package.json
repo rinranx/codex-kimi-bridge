@@ -1,6 +1,6 @@
 {
   "name": "codex-kimi-bridge-node",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "description": "The maintained Node.js fallback implementation of Codex Kimi Bridge.",
   "type": "module",
   "bin": {

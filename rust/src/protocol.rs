@@ -385,6 +385,13 @@ fn translate_agent_message(
         && !visible_handoff_available
         && agent_message_is_empty_payload_shell(&translated_content)
     {
+        if agent_message_is_followup_shell(&translated_content) {
+            return Err(BridgeError::new(
+                "Codex wrapped a follow-up to an existing Kimi subagent in provider-private encrypted state, which this bridge cannot decrypt. Wait for automatic completion; for new instructions, submit a new visible [KIMI_TASK] and create a new Kimi subagent.",
+            )
+            .param("input")
+            .code("unsupported_cross_provider_followup"));
+        }
         return Err(BridgeError::new(
             "The Kimi subagent task payload is empty. Install and trust the Codex Kimi handoff hooks, or include a visible [KIMI_TASK] in forked history.",
         )
@@ -504,7 +511,21 @@ fn marked_task(text: &str) -> Option<&str> {
 }
 
 fn agent_message_is_empty_payload_shell(content: &Value) -> bool {
-    let text = match content {
+    agent_message_shell_text(content).is_some_and(|text| {
+        text.rfind("Payload:")
+            .is_some_and(|index| text[index + "Payload:".len()..].trim().is_empty())
+    })
+}
+
+fn agent_message_is_followup_shell(content: &Value) -> bool {
+    agent_message_shell_text(content).is_some_and(|text| {
+        text.lines()
+            .any(|line| line.trim() == "Message Type: MESSAGE")
+    })
+}
+
+fn agent_message_shell_text(content: &Value) -> Option<String> {
+    match content {
         Value::String(text) => text.clone(),
         Value::Array(parts) => {
             if parts.iter().any(|part| {
@@ -512,7 +533,7 @@ fn agent_message_is_empty_payload_shell(content: &Value) -> bool {
                     .and_then(Value::as_str)
                     .is_some_and(|kind| kind != "text")
             }) {
-                return false;
+                return None;
             }
             parts
                 .iter()
@@ -520,10 +541,9 @@ fn agent_message_is_empty_payload_shell(content: &Value) -> bool {
                 .collect::<Vec<_>>()
                 .join("\n")
         }
-        _ => return false,
-    };
-    text.rfind("Payload:")
-        .is_some_and(|index| text[index + "Payload:".len()..].trim().is_empty())
+        _ => return None,
+    }
+    .into()
 }
 
 fn require_agent_route<'a>(item: &'a Map<String, Value>, field: &str) -> BridgeResult<&'a str> {
@@ -2458,6 +2478,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(error.code, "missing_agent_message_content");
+        assert_eq!(error.param.as_deref(), Some("input"));
+    }
+
+    #[test]
+    fn reports_opaque_cross_provider_followup_distinctly() {
+        let error = translate_responses_request(
+            json!({
+                "model": "k3",
+                "input": [{
+                    "type": "agent_message",
+                    "author": "/root",
+                    "recipient": "/root/kimi_frontend",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "Message Type: MESSAGE\nTask name: /root/kimi_frontend\nSender: /root\nPayload:\n"
+                        },
+                        {
+                            "type": "encrypted_content",
+                            "encrypted_content": "gAAAA_OPAQUE_FOLLOWUP"
+                        }
+                    ]
+                }]
+            }),
+            "k3",
+            None,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.code, "unsupported_cross_provider_followup");
         assert_eq!(error.param.as_deref(), Some("input"));
     }
 
